@@ -1,0 +1,119 @@
+import 'dart:async';
+import 'package:timezone/data/latest.dart' as tz;
+import '../models/planned_message.dart';
+import 'database_service.dart';
+import 'notification_service.dart';
+
+/// 计划消息服务：解析时间、存储计划、定时触发
+class PlanService {
+  final NotificationService _notificationService;
+  final Map<int, Timer> _timers = {};
+
+  /// 待触发回调：用于在应用前台时插入AI消息
+  void Function(String message)? onPlanTriggered;
+
+  PlanService({required NotificationService notificationService})
+      : _notificationService = notificationService {
+    tz.initializeTimeZones();
+  }
+
+  /// 解析 send_time 字符串为 DateTime
+  static DateTime parseSendTime(String sendTime) {
+    // 相对时间: "30m" = 30分钟后, "2h" = 2小时后
+    if (sendTime.endsWith('m')) {
+      final minutes = int.tryParse(sendTime.substring(0, sendTime.length - 1));
+      if (minutes != null) {
+        return DateTime.now().add(Duration(minutes: minutes));
+      }
+    }
+    if (sendTime.endsWith('h')) {
+      final hours = int.tryParse(sendTime.substring(0, sendTime.length - 1));
+      if (hours != null) {
+        return DateTime.now().add(Duration(hours: hours));
+      }
+    }
+    // ISO 8601 格式
+    return DateTime.parse(sendTime);
+  }
+
+  /// 调度一条计划消息
+  Future<int> scheduleMessage({
+    required DateTime scheduledTime,
+    required String message,
+  }) async {
+    final planned = PlannedMessage(
+      scheduledTime: scheduledTime,
+      message: message,
+    );
+    final id = await DatabaseService.insertPlannedMessage(planned);
+
+    // 使用通知调度（后台/前台均可）
+    await _notificationService.scheduleNotification(
+      id: id,
+      title: 'AI 助手',
+      body: message,
+      scheduledDate: scheduledTime,
+    );
+
+    // 如果延迟小于 15 分钟，同时使用 Timer 实现更精确的前台触发
+    final delay = scheduledTime.difference(DateTime.now());
+    if (delay.inMinutes < 15 && delay.inSeconds > 0) {
+      _timers[id] = Timer(delay, () {
+        _deliverMessage(id, message);
+      });
+    }
+
+    return id;
+  }
+
+  /// 触发计划消息传递
+  void _deliverMessage(int id, String message) {
+    DatabaseService.markDelivered(id);
+    _timers.remove(id)?.cancel();
+    onPlanTriggered?.call(message);
+  }
+
+  /// 从通知点击恢复时调用
+  void deliverFromNotification(int id) async {
+    final messages = await DatabaseService.getPlannedMessages();
+    final target = messages.cast<PlannedMessage?>().firstWhere(
+      (m) => m?.id == id,
+      orElse: () => null,
+    );
+    if (target != null && !target.delivered) {
+      _deliverMessage(id, target.message);
+    }
+  }
+
+  /// 获取所有计划消息
+  Future<List<PlannedMessage>> getPlannedMessages() async {
+    return await DatabaseService.getPlannedMessages();
+  }
+
+  /// 立即触发一条计划消息
+  Future<void> triggerNow(int id) async {
+    final messages = await DatabaseService.getPlannedMessages();
+    final target = messages.cast<PlannedMessage?>().firstWhere(
+      (m) => m?.id == id,
+      orElse: () => null,
+    );
+    if (target != null) {
+      _deliverMessage(id, target.message);
+    }
+  }
+
+  /// 取消一条计划
+  Future<void> cancelPlan(int id) async {
+    _timers.remove(id)?.cancel();
+    await _notificationService.cancelNotification(id);
+    await DatabaseService.deletePlannedMessage(id);
+  }
+
+  /// 释放所有定时器
+  void dispose() {
+    for (final timer in _timers.values) {
+      timer.cancel();
+    }
+    _timers.clear();
+  }
+}
