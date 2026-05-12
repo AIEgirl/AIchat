@@ -40,6 +40,41 @@ class ApiService {
     return ApiService(baseUrl: baseUrl, apiKey: apiKey, model: model);
   }
 
+  static Future<String> testConnection({
+    required String baseUrl,
+    required String apiKey,
+  }) async {
+    final baseUri = Uri.parse(baseUrl.endsWith('/') ? baseUrl : '$baseUrl/');
+    final url = baseUri.resolve('v1/chat/completions').toString();
+
+    final body = jsonEncode({
+      'model': 'deepseek-chat',
+      'messages': [{'role': 'system', 'content': 'ping'}],
+      'max_tokens': 1,
+    });
+
+    final response = await http
+        .post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $apiKey',
+          },
+          body: body,
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200 || response.statusCode == 400) {
+      return '连接成功';
+    }
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      return 'API Key 无效或无权限';
+    }
+    final bodyText = response.body;
+    if (bodyText.length > 100) bodyText.substring(0, 100);
+    return '连接失败 (HTTP ${response.statusCode}): $bodyText';
+  }
+
   String get _maskedKey {
     if (_apiKey.length <= 8) return '***';
     return '${_apiKey.substring(0, 4)}...${_apiKey.substring(_apiKey.length - 4)}';
@@ -50,9 +85,8 @@ class ApiService {
     required List<Map<String, dynamic>> tools,
     String toolChoice = 'auto',
   }) async {
-    final url = _baseUrl.endsWith('/v1')
-        ? '$_baseUrl/chat/completions'
-        : '$_baseUrl/v1/chat/completions';
+    final baseUri = Uri.parse(_baseUrl.endsWith('/') ? _baseUrl : '$_baseUrl/');
+    final url = baseUri.resolve('v1/chat/completions').toString();
 
     debugPrint('══════════════════════════════════════');
     debugPrint('API CALL');

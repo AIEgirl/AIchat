@@ -37,6 +37,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       lastInteractionTime: prefs.getString('last_interaction_time') != null ? DateTime.tryParse(prefs.getString('last_interaction_time')!) : null,
       totalPromptTokens: totalPromptTokens,
       totalCompletionTokens: totalCompletionTokens,
+      themeMode: prefs.getString('theme_mode') ?? 'system',
+      primaryColor: prefs.getInt('primary_color') ?? 0xFF3F51B5,
     );
   }
 
@@ -233,6 +235,18 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(lastInteractionTime: t);
   }
 
+  Future<void> updateThemeMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('theme_mode', mode);
+    state = state.copyWith(themeMode: mode);
+  }
+
+  Future<void> updatePrimaryColor(int color) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('primary_color', color);
+    state = state.copyWith(primaryColor: color);
+  }
+
   Future<void> resetAll() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
@@ -285,6 +299,8 @@ class SettingsState {
   final DateTime? lastInteractionTime;
   final int totalPromptTokens;
   final int totalCompletionTokens;
+  final String themeMode;
+  final int primaryColor;
 
   const SettingsState({
     this.providers = const [],
@@ -298,6 +314,8 @@ class SettingsState {
     this.lastInteractionTime,
     this.totalPromptTokens = 0,
     this.totalCompletionTokens = 0,
+    this.themeMode = 'system',
+    this.primaryColor = 0xFF3F51B5,
   });
 
   int get totalTokens => totalPromptTokens + totalCompletionTokens;
@@ -318,30 +336,21 @@ class SettingsState {
   }
 
   SettingsState copyWith({
-    List<ProviderConfig>? providers,
-    int? activeProviderId,
-    Map<String, List<String>>? modelCache,
-    int? maxShortTermRounds,
-    bool? isFirstRun,
-    bool? proactiveEnabled,
-    double? silenceThresholdHours,
-    List<DndPeriod>? dndPeriods,
-    DateTime? lastInteractionTime,
-    int? totalPromptTokens,
-    int? totalCompletionTokens,
+    List<ProviderConfig>? providers, int? activeProviderId, Map<String, List<String>>? modelCache,
+    int? maxShortTermRounds, bool? isFirstRun, bool? proactiveEnabled, double? silenceThresholdHours,
+    List<DndPeriod>? dndPeriods, DateTime? lastInteractionTime,
+    int? totalPromptTokens, int? totalCompletionTokens,
+    String? themeMode, int? primaryColor,
   }) {
     return SettingsState(
-      providers: providers ?? this.providers,
-      activeProviderId: activeProviderId ?? this.activeProviderId,
-      modelCache: modelCache ?? this.modelCache,
-      maxShortTermRounds: maxShortTermRounds ?? this.maxShortTermRounds,
-      isFirstRun: isFirstRun ?? this.isFirstRun,
-      proactiveEnabled: proactiveEnabled ?? this.proactiveEnabled,
+      providers: providers ?? this.providers, activeProviderId: activeProviderId ?? this.activeProviderId,
+      modelCache: modelCache ?? this.modelCache, maxShortTermRounds: maxShortTermRounds ?? this.maxShortTermRounds,
+      isFirstRun: isFirstRun ?? this.isFirstRun, proactiveEnabled: proactiveEnabled ?? this.proactiveEnabled,
       silenceThresholdHours: silenceThresholdHours ?? this.silenceThresholdHours,
-      dndPeriods: dndPeriods ?? this.dndPeriods,
-      lastInteractionTime: lastInteractionTime ?? this.lastInteractionTime,
+      dndPeriods: dndPeriods ?? this.dndPeriods, lastInteractionTime: lastInteractionTime ?? this.lastInteractionTime,
       totalPromptTokens: totalPromptTokens ?? this.totalPromptTokens,
       totalCompletionTokens: totalCompletionTokens ?? this.totalCompletionTokens,
+      themeMode: themeMode ?? this.themeMode, primaryColor: primaryColor ?? this.primaryColor,
     );
   }
 }

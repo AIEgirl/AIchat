@@ -6,9 +6,11 @@ class ModelService {
     required String baseUrl,
     required String apiKey,
   }) async {
-    final url = baseUrl.endsWith('/v1')
+    final url = baseUrl.contains('deepseek')
         ? '$baseUrl/models'
-        : '$baseUrl/v1/models';
+        : baseUrl.endsWith('/v1')
+            ? '$baseUrl/models'
+            : '$baseUrl/v1/models';
 
     final response = await http.get(
       Uri.parse(url),

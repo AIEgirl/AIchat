@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,11 @@ import '../l10n/app_localizations.dart';
 import 'memory_screen.dart';
 import 'plan_screen.dart';
 import 'settings_screen.dart';
+import '../providers/agent_provider.dart';
+import '../providers/memory_provider.dart';
+import '../models/agent.dart';
+import 'agent_create_screen.dart';
+import 'agent_list_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -114,7 +120,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
     final l10n = AppLocalizations.of(context);
 
     return Scaffold(
+      drawer: _buildDrawer(),
       appBar: AppBar(
+        leading: Builder(builder: (ctx) => IconButton(icon: const Icon(Icons.menu), onPressed: () => Scaffold.of(ctx).openDrawer())),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -134,35 +142,101 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
           IconButton(icon: const Icon(Icons.bug_report), tooltip: l10n.get('debugLogs'), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DebugLogScreen()))),
           IconButton(icon: const Icon(Icons.storage), tooltip: l10n.get('memoryManagement'), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MemoryScreen()))),
           IconButton(icon: const Icon(Icons.schedule), tooltip: l10n.get('plannedMessages'), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PlanScreen()))),
-          IconButton(icon: const Icon(Icons.settings), tooltip: l10n.get('settings'), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()))),
         ],
       ),
-      body: Column(children: [
-        Expanded(
-          child: chatState.messages.isEmpty && !chatState.isLoading
-              ? _buildEmptyState()
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  itemCount: chatState.messages.length,
-                  itemBuilder: (context, index) {
-                    return _AnimatedBubble(
-                      key: ValueKey(chatState.messages[index].dbId ?? chatState.messages[index].timestamp.millisecondsSinceEpoch),
-                      message: chatState.messages[index],
-                      onDelete: () => _onDeleteMessage(chatState.messages[index]),
-                      index: index,
-                    );
-                  },
-                ),
-        ),
-        if (chatState.isLoading) const BouncingDotsIndicator(),
-        if (chatState.error != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text(chatState.error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+      body: Builder(builder: (ctx) {
+        final agent = ref.watch(agentProvider).currentAgent;
+        final bg = agent?.chatBackground;
+        Widget body = Column(children: [
+          Expanded(
+            child: chatState.messages.isEmpty && !chatState.isLoading
+                ? _buildEmptyState()
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    itemCount: chatState.messages.length,
+                    itemBuilder: (context, index) {
+                      return _AnimatedBubble(
+                        key: ValueKey(chatState.messages[index].dbId ?? chatState.messages[index].timestamp.millisecondsSinceEpoch),
+                        message: chatState.messages[index],
+                        onDelete: () => _onDeleteMessage(chatState.messages[index]),
+                        index: index,
+                      );
+                    },
+                  ),
           ),
-        _buildInputArea(),
-      ]),
+          if (chatState.isLoading) const BouncingDotsIndicator(),
+          if (chatState.error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Text(chatState.error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+            ),
+          _buildInputArea(),
+        ]);
+        if (bg != null) {
+          if (bg.startsWith('#')) {
+            body = Container(color: Color(int.parse(bg.substring(1), radix: 16) | 0xFF000000), child: body);
+          } else if (File(bg).existsSync()) {
+            body = Container(decoration: BoxDecoration(image: DecorationImage(image: FileImage(File(bg)), fit: BoxFit.cover, colorFilter: ColorFilter.mode(Colors.white.withAlpha(204), BlendMode.dstATop))), child: body);
+          }
+        }
+        return body;
+      }),
+    );
+  }
+
+  Widget _buildDrawer() {
+    final state = ref.watch(agentProvider);
+    final current = state.currentAgent;
+    return Drawer(
+      child: SafeArea(
+        child: Column(children: [
+          DrawerHeader(
+            decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.end, children: [
+              _agentAvatar(current),
+              const SizedBox(height: 8),
+              Text(current?.name ?? '无智能体', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              if (current?.description.isNotEmpty == true) Text(current!.description, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+            ]),
+          ),
+          if (state.agents.length > 1) ...[
+            Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 4), child: Text('切换智能体', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade600))),
+            ...state.agents.map((a) => ListTile(
+              leading: _agentAvatar(a, radius: 18, fontSize: 14),
+              title: Text(a.name),
+              subtitle: a.description.isNotEmpty ? Text(a.description, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
+              trailing: a.id == current?.id ? Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)) : null,
+            onTap: () {
+              if (a.id != current?.id) {
+                Navigator.pop(context);
+                ref.read(agentProvider.notifier).setActiveAgent(a.id);
+                ref.read(memoryServiceProvider).setAgentId(a.id);
+                ref.read(memoryServiceProvider).loadShortTermFromDb(ref.read(settingsProvider).maxShortTermRounds);
+                ref.read(chatProvider.notifier).reloadChatFromDb();
+              }
+            },
+            )).toList(),
+            const Divider(),
+          ],
+          ListTile(
+            leading: const Icon(Icons.add),
+            title: const Text('创建新智能体'),
+            onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const AgentCreateScreen())); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text('管理智能体'),
+            onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const AgentListScreen())); },
+          ),
+          const Spacer(),
+          ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text('设置'),
+            onTap: () { Navigator.pop(context); Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen())); },
+          ),
+        ]),
+      ),
     );
   }
 
@@ -177,6 +251,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
         Text(l10n.get('startChatSub'), style: TextStyle(fontSize: 13, color: Colors.grey.shade400)),
       ]),
     );
+  }
+
+  Widget _agentAvatar(Agent? agent, {double radius = 28, double fontSize = 24}) {
+    if (agent?.avatarPath != null && agent!.avatarPath!.isNotEmpty && File(agent.avatarPath!).existsSync()) {
+      return ClipOval(child: Image.file(File(agent.avatarPath!), width: radius * 2, height: radius * 2, fit: BoxFit.cover));
+    }
+    return CircleAvatar(radius: radius, backgroundColor: agent != null ? Color(agent.avatarColor) : Colors.grey, child: Text(agent?.name.isNotEmpty == true ? agent!.name[0] : '?', style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold)));
   }
 
   Widget _buildInputArea() {
@@ -288,133 +369,100 @@ class _AnimatedBubbleState extends State<_AnimatedBubble> with SingleTickerProvi
       opacity: _fade,
       child: SlideTransition(
         position: _slide,
-        child: GestureDetector(
-          onLongPress: () => _showContextMenu(context),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Column(
-              crossAxisAlignment: alignment,
-              children: [
-                if (message.isProactive)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(8)),
-                    child: Text(l10n.get('proactiveMessage'), style: const TextStyle(fontSize: 10, color: Colors.deepOrange)),
-                  ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            crossAxisAlignment: alignment,
+            children: [
+              if (message.isProactive)
                 Container(
-                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: color,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(18),
-                      topRight: const Radius.circular(18),
-                      bottomLeft: isUser ? const Radius.circular(18) : const Radius.circular(4),
-                      bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(18),
-                    ),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withAlpha(15), blurRadius: 4, offset: const Offset(0, 2)),
-                    ],
+                  margin: const EdgeInsets.only(bottom: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(8)),
+                  child: Text(l10n.get('proactiveMessage'), style: const TextStyle(fontSize: 10, color: Colors.deepOrange)),
+                ),
+              Container(
+                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: isUser ? const Radius.circular(18) : const Radius.circular(4),
+                    bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(18),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SelectableText(message.content, style: const TextStyle(fontSize: 15)),
-                      const SizedBox(height: 4),
-                      Align(
-                        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Text(
-                          DateFormat('HH:mm').format(message.timestamp),
-                          style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                        ),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withAlpha(15), blurRadius: 4, offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _showActionSheet(context),
+                      child: Text(message.content, style: const TextStyle(fontSize: 15)),
+                    ),
+                    const SizedBox(height: 4),
+                    Align(
+                      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Text(
+                        DateFormat('HH:mm').format(message.timestamp),
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
                       ),
-                    ],
-                  ),
-                ),
-                if (message.toolLogs != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(l10n.get('longPressMore'), style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showContextMenu(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    showDialog(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (ctx) => GestureDetector(
-        onTap: () => Navigator.pop(ctx),
-        child: Center(
-          child: GestureDetector(
-            onTap: () {},
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 40),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black.withAlpha(51), blurRadius: 20)],
-              ),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                if (widget.message.content.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                    child: Text(
-                      widget.message.content.length > 50 ? '${widget.message.content.substring(0, 50)}...' : widget.message.content,
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                const Divider(height: 1),
-                InkWell(
-                  borderRadius: const BorderRadius.vertical(top: const Radius.circular(16)),
-                  child: _menuItem(Icons.copy, l10n.get('copyText')),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Clipboard.setData(ClipboardData(text: widget.message.content));
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.get('copied')), duration: const Duration(seconds: 1)));
-                  },
+                  ],
                 ),
-                if (widget.message.toolLogs != null)
-                  InkWell(
-                    child: _menuItem(Icons.code, l10n.get('viewToolCalls')),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _showToolLogs(context);
-                    },
-                  ),
-                InkWell(
-                  borderRadius: const BorderRadius.vertical(bottom: const Radius.circular(16)),
-                  child: _menuItem(Icons.delete, l10n.get('deleteMessage'), color: Colors.red),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    widget.onDelete();
-                  },
-                ),
-              ]),
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _menuItem(IconData icon, String title, {Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Row(children: [
-        Icon(icon, size: 20, color: color ?? Colors.grey.shade700),
-        const SizedBox(width: 12),
-        Text(title, style: TextStyle(fontSize: 15, color: color ?? Colors.black87)),
-      ]),
+  void _showActionSheet(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final isUser = widget.message.isUser;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.copy),
+            title: Text(l10n.get('copyText')),
+            onTap: () {
+              Navigator.pop(ctx);
+              Clipboard.setData(ClipboardData(text: widget.message.content));
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.get('copied')), duration: const Duration(seconds: 1)));
+            },
+          ),
+          if (!isUser && widget.message.toolLogs != null)
+            ListTile(
+              leading: const Icon(Icons.code),
+              title: Text(l10n.get('viewToolCalls')),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showToolLogs(context);
+              },
+            ),
+          if (!isUser && widget.message.toolLogs == null)
+            ListTile(
+              leading: const Icon(Icons.code, color: Colors.grey),
+              title: Text(l10n.get('viewToolCalls'), style: const TextStyle(color: Colors.grey)),
+              enabled: false,
+            ),
+          ListTile(
+            leading: const Icon(Icons.delete, color: Colors.red),
+            title: Text(l10n.get('deleteMessage'), style: const TextStyle(color: Colors.red)),
+            onTap: () {
+              Navigator.pop(ctx);
+              widget.onDelete();
+            },
+          ),
+        ]),
+      ),
     );
   }
 
@@ -433,14 +481,23 @@ class _AnimatedBubbleState extends State<_AnimatedBubble> with SingleTickerProvi
             itemCount: widget.message.toolLogs!.length,
             itemBuilder: (_, i) {
               final log = widget.message.toolLogs![i];
+              final formattedArgs = const JsonEncoder.withIndent('  ').convert(log.arguments);
               return Card(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 child: Padding(
                   padding: const EdgeInsets.all(10),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('${l10n.get('tool')}: ${log.toolName}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    Text('Args: ${log.arguments}'),
-                    Text('Result: ${log.result}'),
+                    Text('${l10n.get('tool')}: ${log.toolName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text('Args:', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 2, bottom: 4),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
+                      child: Text(formattedArgs, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+                    ),
+                    Text('Result: ${log.result}', style: const TextStyle(fontSize: 13)),
                   ]),
                 ),
               );

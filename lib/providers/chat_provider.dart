@@ -11,6 +11,7 @@ import '../services/plan_service.dart';
 import '../services/database_service.dart';
 import 'memory_provider.dart';
 import 'settings_provider.dart';
+import 'agent_provider.dart';
 
 class ChatMessage {
   final int? dbId;
@@ -113,7 +114,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
   }
 
   Future<void> _loadChatMessagesFromDb() async {
-    final rows = await DatabaseService.getChatMessages();
+    final rows = await DatabaseService.getChatMessages(agentId: _agentId);
     final messages = rows.map((row) {
       return ChatMessage(
         dbId: row['id'] as int,
@@ -126,12 +127,25 @@ class ChatNotifier extends StateNotifier<ChatState> {
     state = state.copyWith(messages: messages);
   }
 
+  /// 切换智能体时重新加载聊天记录
+  Future<void> reloadChatFromDb() async {
+    state = state.copyWith(messages: []);
+    await _loadChatMessagesFromDb();
+  }
+
+  /// 清空当前智能体的聊天记录
+  Future<void> clearCurrentAgentChatMessages() async {
+    await DatabaseService.clearChatMessages(agentId: _agentId);
+    state = state.copyWith(messages: []);
+  }
+
   Future<void> _saveChatMessageToDb(ChatMessage msg) async {
     final dbId = await DatabaseService.insertChatMessage(
       role: msg.role,
       content: msg.content,
       timestampMs: msg.timestamp.millisecondsSinceEpoch,
       shortMemId: msg.shortMemId,
+      agentId: _agentId,
     );
     state = state.copyWith(
       messages: state.messages.map((m) {
@@ -153,6 +167,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   MemoryService get memoryService => _memoryService;
   ToolExecutor get toolExecutor => _toolExecutor;
+  String? get _agentId => _ref.read(agentProvider).currentAgent?.id;
 
   void _startProactiveCheck() {
     _proactiveCheckTimer?.cancel();
@@ -271,6 +286,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
         : 'no_rsp';
     DatabaseService.insertDebugLog(
       requestSummary: summary, responseSummary: rsp, error: error, durationMs: elapsedMs,
+      agentId: _agentId,
     );
 
     _recordTokenUsage(responseBody);
@@ -526,6 +542,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
         baseUrl: baseUrl,
       );
 
+      if (_agentId != null) {
+        apiMessages[0]['agent_id'] = _agentId;
+      }
+
       final result = await _runToolLoop(
         apiService: apiService, tools: tools, apiMessages: apiMessages, startTime: startTime,
       );
@@ -603,8 +623,17 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final weekStr = weekdays[now.weekday - 1];
 
     final baseMemories = await _memoryService.getBaseMemories();
-    final personaLines = baseMemories.where((m) => m.isSetting).map((m) => m.content).join('\n');
-    final persona = personaLines.isNotEmpty ? personaLines : defaultSystemPersona;
+    final agent = _ref.read(agentProvider).currentAgent;
+    String persona;
+    if (agent != null) {
+      persona = agent.persona
+        .replaceAll('{{NAME}}', agent.name)
+        .replaceAll('{{GENDER}}', agent.gender)
+        .replaceAll('{{DESCRIPTION}}', agent.description);
+    } else {
+      final personaLines = baseMemories.where((m) => m.isSetting).map((m) => m.content).join('\n');
+      persona = personaLines.isNotEmpty ? personaLines : defaultSystemPersona;
+    }
 
     final longTermPrompt = await _memoryService.buildLongTermPrompt();
     final basePrompt = await _memoryService.buildBasePrompt();
