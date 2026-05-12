@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'services/notification_service.dart';
 import 'services/database_service.dart';
 import 'services/locale_service.dart';
+import 'services/plugin_manager.dart';
 import 'providers/chat_provider.dart';
 import 'providers/agent_provider.dart';
 import 'providers/settings_provider.dart';
@@ -20,6 +21,8 @@ void main() async {
   await notificationService.initialize();
 
   await DatabaseService.migrateDefaultPersona(defaultSystemPersona);
+
+  await PluginManager.instance.init();
 
   final initialLocale = await LocaleService.resolveLocale();
 

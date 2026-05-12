@@ -9,6 +9,7 @@ import '../services/tool_executor.dart';
 import '../services/notification_service.dart';
 import '../services/plan_service.dart';
 import '../services/database_service.dart';
+import '../services/plugin_manager.dart';
 import 'memory_provider.dart';
 import 'settings_provider.dart';
 import 'agent_provider.dart';
@@ -480,8 +481,11 @@ class ChatNotifier extends StateNotifier<ChatState> {
     _logH1('NEW USER MESSAGE');
     _log(content);
 
-    final shortMsg = _memoryService.addShortTermMessage(role: 'user', content: content);
-    final userMsg = ChatMessage(role: 'user', content: content, shortMemId: shortMsg.id);
+    // Plugin: modify input
+    final modContent = PluginManager.instance.applyInputMods(content) ?? content;
+
+    final shortMsg = _memoryService.addShortTermMessage(role: 'user', content: modContent);
+    final userMsg = ChatMessage(role: 'user', content: modContent, shortMemId: shortMsg.id);
     state = state.copyWith(messages: [...state.messages, userMsg], error: null);
     _saveChatMessageToDb(userMsg);
     _ref.read(settingsProvider.notifier).updateLastInteractionTime(DateTime.now());
@@ -552,9 +556,10 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
       if (result.chatMessage != null && result.chatMessage!.isNotEmpty) {
         _log('AI reply: ${result.chatMessage}');
+        final displayContent = PluginManager.instance.applyOutputMods(result.chatMessage!) ?? result.chatMessage!;
         final shortAi = _memoryService.addShortTermMessage(role: 'assistant', content: result.chatMessage!);
         final aiMsg = ChatMessage(
-          role: 'assistant', content: result.chatMessage!,
+          role: 'assistant', content: displayContent,
           toolLogs: result.toolLogs.isNotEmpty ? result.toolLogs : null, shortMemId: shortAi.id,
         );
         _ref.read(settingsProvider.notifier).updateLastInteractionTime(DateTime.now());

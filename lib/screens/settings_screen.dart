@@ -16,6 +16,7 @@ import '../services/locale_service.dart';
 import '../l10n/app_localizations.dart';
 import 'token_usage_screen.dart';
 import 'memory_screen.dart';
+import 'plugin_screen.dart';
 import 'chat_screen.dart';
 import 'agent_create_screen.dart';
 import 'agent_list_screen.dart';
@@ -400,6 +401,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _listTileRow(Icons.bookmark, l10n.get('baseMemory'), l10n.get('baseMemoryDesc'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MemoryScreen()))),
         const Divider(height: 1),
         _listTileRow(Icons.bug_report, l10n.get('debugLogs'), l10n.get('debugLogsDesc'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DebugLogScreen()))),
+        const Divider(height: 1),
+        _listTileRow(Icons.extension, '插件管理', '安装、启用或禁用插件', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PluginScreen()))),
         const Divider(height: 1),
         const SizedBox(height: 8),
         OutlinedButton.icon(

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart' as path_provider;
 import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/database_service.dart';
+import '../services/plugin_manager.dart';
 import '../l10n/app_localizations.dart';
 import 'memory_screen.dart';
 import 'plan_screen.dart';
@@ -171,6 +172,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Text(chatState.error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
             ),
+          _buildPluginButtons(),
           _buildInputArea(),
         ]);
         if (bg != null) {
@@ -260,6 +262,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
     return CircleAvatar(radius: radius, backgroundColor: agent != null ? Color(agent.avatarColor) : Colors.grey, child: Text(agent?.name.isNotEmpty == true ? agent!.name[0] : '?', style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold)));
   }
 
+  Widget _buildPluginButtons() {
+    final buttons = PluginManager.instance.getAllButtons();
+    if (buttons.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: buttons.map((b) => Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: ActionChip(
+            avatar: b.icon != null ? Icon(_resolveIcon(b.icon!), size: 16) : null,
+            label: Text(b.label),
+            onPressed: () {
+              final text = b.onClick();
+              if (text.isNotEmpty) {
+                _controller.text += _controller.text.isEmpty ? text : '\n$text';
+                _controller.selection = TextSelection.collapsed(offset: _controller.text.length);
+              }
+            },
+          ),
+        )).toList()),
+      ),
+    );
+  }
+
   Widget _buildInputArea() {
     final l10n = AppLocalizations.of(context);
     return Container(
@@ -299,6 +326,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
         ]),
       ),
     );
+  }
+
+  IconData _resolveIcon(String name) {
+    switch (name) {
+      case 'touch_app': return Icons.touch_app;
+      case 'favorite': return Icons.favorite;
+      case 'star': return Icons.star;
+      case 'waving_hand': return Icons.waving_hand;
+      case 'thumb_up': return Icons.thumb_up;
+      case 'send': return Icons.send;
+      case 'mic': return Icons.mic;
+      default: return Icons.extension;
+    }
   }
 
   void _showAttachmentMenu() {
