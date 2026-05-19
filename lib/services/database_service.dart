@@ -20,7 +20,7 @@ class DatabaseService {
   static Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'aichat.db');
-    return await openDatabase(path, version: 5, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 6, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -29,7 +29,7 @@ class DatabaseService {
     await db.execute('''CREATE TABLE base_memories (id TEXT PRIMARY KEY, type TEXT NOT NULL, content TEXT NOT NULL, agent_id TEXT, updated_at INTEGER NOT NULL, created_at INTEGER NOT NULL)''');
     await db.execute('''CREATE TABLE planned_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, scheduled_time INTEGER NOT NULL, message TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, agent_id TEXT)''');
     await db.execute('''CREATE TABLE short_term_messages (id TEXT PRIMARY KEY, role TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL, agent_id TEXT)''');
-    await db.execute('''CREATE TABLE chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL, short_mem_id TEXT, agent_id TEXT)''');
+    await db.execute('''CREATE TABLE chat_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL, short_mem_id TEXT, agent_id TEXT, image_path TEXT)''');
     await db.execute('''CREATE TABLE debug_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, request_summary TEXT NOT NULL, response_summary TEXT NOT NULL, error TEXT, duration_ms INTEGER, agent_id TEXT)''');
     await db.execute('''CREATE TABLE providers (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, api_base_url TEXT NOT NULL, api_key TEXT NOT NULL, selected_model TEXT DEFAULT '', created_at INTEGER NOT NULL)''');
     await db.execute('''CREATE TABLE token_usage (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER NOT NULL, prompt_tokens INTEGER NOT NULL, completion_tokens INTEGER NOT NULL, model TEXT, agent_id TEXT)''');
@@ -54,6 +54,9 @@ class DatabaseService {
     if (oldVersion < 5) {
       try { await db.execute("ALTER TABLE agents ADD COLUMN avatar_path TEXT"); } catch (_) {}
       try { await db.execute("ALTER TABLE agents ADD COLUMN chat_background TEXT"); } catch (_) {}
+    }
+    if (oldVersion < 6) {
+      try { await db.execute("ALTER TABLE chat_messages ADD COLUMN image_path TEXT"); } catch (_) {}
     }
   }
 
@@ -275,9 +278,9 @@ class DatabaseService {
 
   // ─── 聊天消息 ──────────────────────
 
-  static Future<int> insertChatMessage({required String role, required String content, required int timestampMs, String? shortMemId, String? agentId}) async {
+  static Future<int> insertChatMessage({required String role, required String content, required int timestampMs, String? shortMemId, String? agentId, String? imagePath}) async {
     final db = await database;
-    return await db.insert('chat_messages', {'role': role, 'content': content, 'timestamp': timestampMs, 'short_mem_id': shortMemId, 'agent_id': agentId});
+    return await db.insert('chat_messages', {'role': role, 'content': content, 'timestamp': timestampMs, 'short_mem_id': shortMemId, 'agent_id': agentId, 'image_path': imagePath});
   }
 
   static Future<List<Map<String, dynamic>>> getChatMessages({String? agentId}) async {

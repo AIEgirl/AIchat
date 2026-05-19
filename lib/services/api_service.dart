@@ -268,6 +268,54 @@ class ApiService {
     return choices[0]['finish_reason'] as String?;
   }
 
+  static Future<Map<String, dynamic>> visionChat({
+    required String baseUrl,
+    required String apiKey,
+    required String model,
+    required String? text,
+    required String imageBase64,
+  }) async {
+    final baseUri = Uri.parse(baseUrl.endsWith('/') ? baseUrl : '$baseUrl/');
+    final url = baseUri.resolve('v1/chat/completions').toString();
+
+    final content = <Map<String, dynamic>>[];
+    if (text != null && text.isNotEmpty) {
+      content.add({'type': 'text', 'text': text});
+    }
+    content.add({
+      'type': 'image_url',
+      'image_url': {'url': 'data:image/jpeg;base64,$imageBase64'},
+    });
+
+    final body = jsonEncode({
+      'model': model,
+      'messages': [
+        {'role': 'user', 'content': content},
+      ],
+      'max_tokens': 2048,
+    });
+
+    debugPrint('VISION API CALL: $url model=$model');
+
+    final response = await http.post(Uri.parse(url),
+      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $apiKey'},
+      body: body,
+    ).timeout(const Duration(seconds: 60));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final choices = data['choices'] as List?;
+      if (choices != null && choices.isNotEmpty) {
+        final msg = choices.first['message'];
+        if (msg != null && msg['content'] is String && (msg['content'] as String).isNotEmpty) {
+          return {'content': msg['content'] as String};
+        }
+      }
+      throw ApiException('Vision API returned empty response');
+    }
+    throw ApiException('Vision API error (${response.statusCode}): ${response.body}');
+  }
+
   static List<Map<String, dynamic>> getToolDefinitions() {
     return [
       {

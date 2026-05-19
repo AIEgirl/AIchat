@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
 import '../services/memory_service.dart';
@@ -22,6 +24,7 @@ class ChatMessage {
   final List<ToolExecutionLog>? toolLogs;
   final bool isProactive;
   final String? shortMemId;
+  final String? imagePath;
 
   ChatMessage({
     this.dbId,
@@ -31,6 +34,7 @@ class ChatMessage {
     this.toolLogs,
     this.isProactive = false,
     this.shortMemId,
+    this.imagePath,
   }) : timestamp = timestamp ?? DateTime.now();
 
   bool get isUser => role == 'user';
@@ -114,8 +118,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
     _startProactiveCheck();
   }
 
-  Future<void> _loadChatMessagesFromDb() async {
-    final rows = await DatabaseService.getChatMessages(agentId: _agentId);
+  Future<void> _loadChatMessagesFromDb({String? agentId}) async {
+    final rows = await DatabaseService.getChatMessages(agentId: agentId ?? _agentId);
     final messages = rows.map((row) {
       return ChatMessage(
         dbId: row['id'] as int,
@@ -123,15 +127,16 @@ class ChatNotifier extends StateNotifier<ChatState> {
         content: row['content'] as String,
         timestamp: DateTime.fromMillisecondsSinceEpoch(row['timestamp'] as int),
         shortMemId: row['short_mem_id'] as String?,
+        imagePath: row['image_path'] as String?,
       );
     }).toList();
     state = state.copyWith(messages: messages);
+    _log('Loaded ${messages.length} chat messages for agent $agentId');
   }
 
-  /// 切换智能体时重新加载聊天记录
-  Future<void> reloadChatFromDb() async {
+  Future<void> reloadChatFromDb([String? agentId]) async {
     state = state.copyWith(messages: []);
-    await _loadChatMessagesFromDb();
+    await _loadChatMessagesFromDb(agentId: agentId);
   }
 
   /// 清空当前智能体的聊天记录
@@ -141,12 +146,14 @@ class ChatNotifier extends StateNotifier<ChatState> {
   }
 
   Future<void> _saveChatMessageToDb(ChatMessage msg) async {
+    _log('DB: saving chat msg (agent=$_agentId, role=${msg.role})');
     final dbId = await DatabaseService.insertChatMessage(
       role: msg.role,
       content: msg.content,
       timestampMs: msg.timestamp.millisecondsSinceEpoch,
       shortMemId: msg.shortMemId,
       agentId: _agentId,
+      imagePath: msg.imagePath,
     );
     state = state.copyWith(
       messages: state.messages.map((m) {
@@ -159,6 +166,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
             toolLogs: m.toolLogs,
             isProactive: m.isProactive,
             shortMemId: m.shortMemId,
+            imagePath: m.imagePath,
           );
         }
         return m;
@@ -616,6 +624,96 @@ class ChatNotifier extends StateNotifier<ChatState> {
         }
       }
       state = state.copyWith(isLoading: false, error: '请求失败: $e');
+    }
+  }
+
+  Future<void> sendImageMessage(File imageFile, String text) async {
+    if (state.isLoading) return;
+
+    _logH1('NEW IMAGE MESSAGE');
+
+    final bytes = await imageFile.readAsBytes();
+    final imageBase64 = base64Encode(bytes);
+
+    final dir = (await getApplicationDocumentsDirectory()).path;
+    final savedPath = '${dir}/img_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await File(savedPath).writeAsBytes(bytes);
+
+    final displayText = text.isNotEmpty ? text : '[图片]';
+    final displayContent = text.isNotEmpty ? text : '';
+    final shortMsg = _memoryService.addShortTermMessage(role: 'user', content: displayText);
+    final userMsg = ChatMessage(role: 'user', content: displayContent, imagePath: savedPath, shortMemId: shortMsg.id);
+    state = state.copyWith(messages: [...state.messages, userMsg], isLoading: true, error: null);
+    _saveChatMessageToDb(userMsg);
+
+    try {
+      final settings = _ref.read(settingsProvider);
+      final provider = settings.activeProvider;
+      if (provider == null) {
+        state = state.copyWith(isLoading: false, error: '请先配置供应商');
+        return;
+      }
+
+      final result = await ApiService.visionChat(
+        baseUrl: provider.apiBaseUrl,
+        apiKey: provider.apiKey,
+        model: provider.selectedModel.isNotEmpty ? provider.selectedModel : 'kimi-k2.6',
+        text: text.isNotEmpty ? text : null,
+        imageBase64: imageBase64,
+      );
+
+      final reply = result['content'] as String;
+      final shortAi = _memoryService.addShortTermMessage(role: 'assistant', content: reply);
+      final aiMsg = ChatMessage(role: 'assistant', content: reply, shortMemId: shortAi.id);
+      state = state.copyWith(messages: [...state.messages, aiMsg], isLoading: false);
+      _saveChatMessageToDb(aiMsg);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: '图片理解失败: $e');
+    }
+  }
+
+  Future<void> regenerateMessage(int messageIndex) async {
+    if (state.isLoading) return;
+    final msg = state.messages[messageIndex];
+    if (msg.isUser) return;
+
+    _logH1('REGENERATE');
+
+    if (msg.dbId != null) await DatabaseService.deleteChatMessage(msg.dbId!);
+    if (msg.shortMemId != null) await _memoryService.deleteShortTermMessage(msg.shortMemId!);
+
+    final newMessages = List<ChatMessage>.from(state.messages)..removeAt(messageIndex);
+    state = state.copyWith(messages: newMessages, isLoading: true);
+
+    try {
+      final settings = _ref.read(settingsProvider);
+      final provider = settings.activeProvider;
+      if (provider == null) {
+        state = state.copyWith(isLoading: false, error: '请先配置供应商');
+        return;
+      }
+
+      final apiService = ApiService.fromConfig(model: settings.effectiveModel, apiKey: settings.effectiveApiKey, baseUrl: settings.effectiveBaseUrl);
+      final systemContent = await _buildSystemPrompt();
+      final apiMessages = <Map<String, dynamic>>[{'role': 'system', 'content': systemContent}, ..._memoryService.getShortTermAsMessages()];
+
+      while (apiMessages.isNotEmpty && apiMessages.last['role'] != 'user') {
+        apiMessages.removeLast();
+      }
+
+      final result = await _runToolLoop(apiService: apiService, tools: ApiService.getToolDefinitions(), apiMessages: apiMessages, startTime: DateTime.now());
+
+      if (result.chatMessage != null && result.chatMessage!.isNotEmpty) {
+        final displayContent = PluginManager.instance.applyOutputMods(result.chatMessage!) ?? result.chatMessage!;
+        final shortAi = _memoryService.addShortTermMessage(role: 'assistant', content: result.chatMessage!);
+        final aiMsg = ChatMessage(role: 'assistant', content: displayContent, toolLogs: result.toolLogs.isNotEmpty ? result.toolLogs : null, shortMemId: shortAi.id);
+        state = state.copyWith(messages: [...state.messages, aiMsg], isLoading: false);
+        _saveChatMessageToDb(aiMsg);
+      } else {
+        state = state.copyWith(isLoading: false, error: '重新生成失败');
+      }
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: '重新生成失败: $e');
     }
   }
 

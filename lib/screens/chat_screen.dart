@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart' as path_provider;
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart' as pp;
 import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/database_service.dart';
@@ -30,6 +31,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
   final ScrollController _scrollController = ScrollController();
   late final AnimationController _sendAnimCtrl;
   late final Animation<double> _sendScale;
+  File? _pendingImage;
 
   @override
   void initState() {
@@ -74,6 +76,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
     _sendAnimCtrl.forward(from: 0);
     ref.read(chatProvider.notifier).sendMessage(text);
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
+  void _sendMessageOrImage() {
+    if (_pendingImage != null) {
+      ref.read(chatProvider.notifier).sendImageMessage(_pendingImage!, _controller.text.trim());
+      _controller.clear();
+      setState(() => _pendingImage = null);
+      _sendAnimCtrl.forward(from: 0);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    } else {
+      _sendMessage();
+    }
+  }
+
+  void _showAttachmentOptions() {
+    showModalBottomSheet(context: context, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(child: Padding(padding: const EdgeInsets.only(bottom: 16), child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.photo_library), title: const Text('图片'), onTap: () { Navigator.pop(ctx); _pickImage(ImageSource.gallery); }),
+        ListTile(leading: const Icon(Icons.camera_alt), title: const Text('拍照'), onTap: () { Navigator.pop(ctx); _pickImage(ImageSource.camera); }),
+      ]))),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final img = await picker.pickImage(source: source, maxWidth: 2048);
+      if (img != null) setState(() => _pendingImage = File(img.path));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   void _scrollToBottom() {
@@ -161,6 +194,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
                         key: ValueKey(chatState.messages[index].dbId ?? chatState.messages[index].timestamp.millisecondsSinceEpoch),
                         message: chatState.messages[index],
                         onDelete: () => _onDeleteMessage(chatState.messages[index]),
+                        onRegenerate: !chatState.messages[index].isUser ? () { ref.read(chatProvider.notifier).regenerateMessage(index); } : null,
                         index: index,
                       );
                     },
@@ -209,13 +243,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
               title: Text(a.name),
               subtitle: a.description.isNotEmpty ? Text(a.description, maxLines: 1, overflow: TextOverflow.ellipsis) : null,
               trailing: a.id == current?.id ? Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)) : null,
-            onTap: () {
+            onTap: () async {
               if (a.id != current?.id) {
                 Navigator.pop(context);
-                ref.read(agentProvider.notifier).setActiveAgent(a.id);
+                await ref.read(agentProvider.notifier).setActiveAgent(a.id);
                 ref.read(memoryServiceProvider).setAgentId(a.id);
-                ref.read(memoryServiceProvider).loadShortTermFromDb(ref.read(settingsProvider).maxShortTermRounds);
-                ref.read(chatProvider.notifier).reloadChatFromDb();
+                await ref.read(memoryServiceProvider).loadShortTermFromDb(ref.read(settingsProvider).maxShortTermRounds);
+                ref.read(chatProvider.notifier).reloadChatFromDb(a.id);
               }
             },
             )).toList(),
@@ -293,36 +327,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withAlpha(26), blurRadius: 4, offset: const Offset(0, -1))],
+        boxShadow: [BoxShadow(color: Colors.black.withAlpha(15), blurRadius: 4, offset: const Offset(0, -1))],
       ),
       child: SafeArea(
-        child: Row(children: [
-          IconButton(icon: const Icon(Icons.add), tooltip: l10n.get('attachmentMenu'), onPressed: _showAttachmentMenu),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: TextField(
-                controller: _controller,
-                decoration: InputDecoration(hintText: l10n.get('typeMessage'), border: InputBorder.none),
-                maxLines: 4,
-                minLines: 1,
-                textInputAction: TextInputAction.newline,
-                onSubmitted: (_) => _sendMessage(),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (_pendingImage != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              height: 80,
+              child: Stack(children: [
+                ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(_pendingImage!, fit: BoxFit.cover)),
+                Positioned(top: 0, right: 0, child: IconButton(icon: const Icon(Icons.close, size: 18, color: Colors.white), style: IconButton.styleFrom(backgroundColor: Colors.black.withAlpha(128), minimumSize: const Size(20, 20)), onPressed: () => setState(() => _pendingImage = null))),
+              ]),
+            ),
+          Row(children: [
+            IconButton(icon: const Icon(Icons.add_circle_outline, size: 28), onPressed: _showAttachmentOptions),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(25), border: Border.all(color: Colors.grey.shade300)),
+                child: TextField(
+                  controller: _controller,
+                  decoration: InputDecoration(hintText: l10n.get('typeMessage'), border: InputBorder.none),
+                  maxLines: 4, minLines: 1,
+                  textInputAction: TextInputAction.newline,
+                  onSubmitted: (_) => _sendMessageOrImage(),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          ScaleTransition(
-            scale: _sendScale,
-            child: IconButton(
-              icon: Icon(Icons.send_rounded, color: Theme.of(context).colorScheme.primary),
-              onPressed: _sendMessage,
-            ),
-          ),
+            const SizedBox(width: 8),
+            ScaleTransition(scale: _sendScale, child: Container(
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, shape: BoxShape.circle),
+              child: IconButton(icon: const Icon(Icons.send_rounded, color: Colors.white), onPressed: _sendMessageOrImage),
+            )),
+          ]),
         ]),
       ),
     );
@@ -367,9 +405,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> with TickerProviderStat
 class _AnimatedBubble extends StatefulWidget {
   final ChatMessage message;
   final VoidCallback onDelete;
+  final VoidCallback? onRegenerate;
   final int index;
 
-  const _AnimatedBubble({super.key, required this.message, required this.onDelete, required this.index});
+  const _AnimatedBubble({super.key, required this.message, required this.onDelete, this.onRegenerate, required this.index});
 
   @override
   State<_AnimatedBubble> createState() => _AnimatedBubbleState();
@@ -400,68 +439,60 @@ class _AnimatedBubbleState extends State<_AnimatedBubble> with SingleTickerProvi
     final message = widget.message;
     final l10n = AppLocalizations.of(context);
     final isUser = message.isUser;
-    final alignment = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
-    final color = isUser
-        ? Theme.of(context).colorScheme.primaryContainer
-        : Colors.grey.shade100;
+    final agentState = ProviderScope.containerOf(context, listen: false).read(agentProvider);
+    
+    final bubbleColor = isUser ? const Color(0xFF95EC69) : Colors.white;
+    final bubbleBorder = isUser ? null : Border.all(color: Colors.grey.shade300);
 
-    return FadeTransition(
-      opacity: _fade,
-      child: SlideTransition(
-        position: _slide,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(
-            crossAxisAlignment: alignment,
-            children: [
-              if (message.isProactive)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(8)),
-                  child: Text(l10n.get('proactiveMessage'), style: const TextStyle(fontSize: 10, color: Colors.deepOrange)),
-                ),
-              Container(
-                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(18),
-                    topRight: const Radius.circular(18),
-                    bottomLeft: isUser ? const Radius.circular(18) : const Radius.circular(4),
-                    bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(18),
+    return FadeTransition(opacity: _fade, child: SlideTransition(position: _slide, child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          // AI: avatar on left
+          if (!isUser) _agentAvatarSmall(agentState.currentAgent),
+          if (!isUser) const SizedBox(width: 8),
+          // Bubble
+          Flexible(
+            child: GestureDetector(
+              onTap: () => _showActionBar(context),
+              child: Container(
+                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(color: bubbleColor, borderRadius: BorderRadius.circular(16), border: bubbleBorder, boxShadow: [BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 2, offset: const Offset(0, 1))]),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (message.imagePath != null && File(message.imagePath!).existsSync())
+                    ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(message.imagePath!), fit: BoxFit.cover, width: double.infinity)),
+                  if (message.content.isNotEmpty) ...[
+                    if (message.imagePath != null) const SizedBox(height: 4),
+                    Text(message.content, style: TextStyle(fontSize: 15, color: isUser ? Colors.black87 : Colors.black87)),
+                  ],
+                  const SizedBox(height: 2),
+                  Align(
+                    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Text(DateFormat('HH:mm').format(message.timestamp), style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
                   ),
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withAlpha(15), blurRadius: 4, offset: const Offset(0, 2)),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () => _showActionSheet(context),
-                      child: Text(message.content, style: const TextStyle(fontSize: 15)),
-                    ),
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Text(
-                        DateFormat('HH:mm').format(message.timestamp),
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                      ),
-                    ),
-                  ],
-                ),
+                ]),
               ),
-            ],
+            ),
           ),
-        ),
+          // User: avatar on right
+          if (isUser) const SizedBox(width: 8),
+          if (isUser) Container(width: 36, decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle), child: const Icon(Icons.person, color: Colors.white, size: 20)),
+        ],
       ),
-    );
+    )));
   }
 
-  void _showActionSheet(BuildContext context) {
+  Widget _agentAvatarSmall(dynamic agent) {
+    if (agent?.avatarPath != null && agent!.avatarPath!.isNotEmpty && File(agent.avatarPath!).existsSync()) {
+      return ClipOval(child: Image.file(File(agent.avatarPath!), width: 36, height: 36, fit: BoxFit.cover));
+    }
+    return CircleAvatar(radius: 18, backgroundColor: agent != null ? Color(agent.avatarColor) : Colors.grey, child: Text(agent?.name.isNotEmpty == true ? agent!.name[0].toUpperCase() : 'AI', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)));
+  }
+
+  void _showActionBar(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isUser = widget.message.isUser;
     showModalBottomSheet(
@@ -469,38 +500,26 @@ class _AnimatedBubbleState extends State<_AnimatedBubble> with SingleTickerProvi
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.copy),
-            title: Text(l10n.get('copyText')),
-            onTap: () {
+          ListTile(leading: const Icon(Icons.copy), title: Text(l10n.get('copyText')), onTap: () {
+            Navigator.pop(ctx);
+            Clipboard.setData(ClipboardData(text: widget.message.content));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.get('copied')), duration: const Duration(seconds: 1)));
+          }),
+          if (!isUser) ...[
+            ListTile(leading: const Icon(Icons.refresh), title: const Text('重新生成'), onTap: () {
               Navigator.pop(ctx);
-              Clipboard.setData(ClipboardData(text: widget.message.content));
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.get('copied')), duration: const Duration(seconds: 1)));
-            },
-          ),
-          if (!isUser && widget.message.toolLogs != null)
-            ListTile(
-              leading: const Icon(Icons.code),
-              title: Text(l10n.get('viewToolCalls')),
-              onTap: () {
+              widget.onRegenerate?.call();
+            }),
+            if (widget.message.toolLogs != null)
+              ListTile(leading: const Icon(Icons.code), title: Text(l10n.get('viewToolCalls')), onTap: () {
                 Navigator.pop(ctx);
                 _showToolLogs(context);
-              },
-            ),
-          if (!isUser && widget.message.toolLogs == null)
-            ListTile(
-              leading: const Icon(Icons.code, color: Colors.grey),
-              title: Text(l10n.get('viewToolCalls'), style: const TextStyle(color: Colors.grey)),
-              enabled: false,
-            ),
-          ListTile(
-            leading: const Icon(Icons.delete, color: Colors.red),
-            title: Text(l10n.get('deleteMessage'), style: const TextStyle(color: Colors.red)),
-            onTap: () {
-              Navigator.pop(ctx);
-              widget.onDelete();
-            },
-          ),
+              }),
+          ],
+          ListTile(leading: const Icon(Icons.delete, color: Colors.red), title: Text(l10n.get('deleteMessage'), style: const TextStyle(color: Colors.red)), onTap: () {
+            Navigator.pop(ctx);
+            widget.onDelete();
+          }),
         ]),
       ),
     );
@@ -637,7 +656,7 @@ class _DebugLogScreenState extends ConsumerState<DebugLogScreen> {
     }
 
     try {
-      final dir = await path_provider.getApplicationDocumentsDirectory();
+      final dir = await pp.getApplicationDocumentsDirectory();
       final file = File('${dir.path}/debug_logs_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.txt');
       await file.writeAsString(sb.toString());
       if (mounted) {
