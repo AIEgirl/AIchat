@@ -1,6 +1,4 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/agent.dart';
 import '../services/database_service.dart';
 
@@ -20,8 +18,8 @@ class AgentNotifier extends StateNotifier<AgentState> {
   List<Agent> get agents => state.agents;
   Agent? get currentAgent => state.currentAgent;
 
-  Future<void> createAgent({required String name, String gender = '', String description = '', required String persona, int avatarColor = 0xFFE8F5E9}) async {
-    final agent = Agent(name: name, gender: gender, description: description, persona: persona, avatarColor: avatarColor, isActive: true);
+  Future<void> createAgent({required String name, String gender = '', String description = '', required String persona, String? openingLine, int avatarColor = 0xFFE8F5E9}) async {
+    final agent = Agent(name: name, gender: gender, description: description, persona: persona, openingLine: openingLine, avatarColor: avatarColor, isActive: true);
     await DatabaseService.insertAgent(agent);
     await DatabaseService.setActiveAgent(agent.id);
     final agents = await DatabaseService.getAgents();

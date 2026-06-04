@@ -14,12 +14,12 @@ import '../services/api_service.dart';
 import '../services/database_service.dart';
 import '../services/locale_service.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/app_theme.dart';
 import 'token_usage_screen.dart';
 import 'memory_screen.dart';
 import 'plugin_screen.dart';
 import 'chat_screen.dart';
 import 'agent_create_screen.dart';
-import 'agent_list_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -50,10 +50,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _snack(String msg, {bool error = false}) {
     if (!mounted) return;
+    final scheme = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
-      backgroundColor: error ? Colors.red.shade700 : Colors.green.shade700,
-      duration: const Duration(seconds: 2),
+      backgroundColor: error ? scheme.errorContainer : scheme.primaryContainer,
+      showCloseIcon: true,
     ));
   }
 
@@ -65,18 +66,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.get('settings'), style: const TextStyle(fontWeight: FontWeight.w600)),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: Colors.grey.shade200, height: 1),
-        ),
+        title: Text(l10n.get('settings')),
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
           _sectionHeader(l10n.get('suppliers')),
           _buildSupplierSection(s, provider),
-          _sectionHeader('智能体'),
+          _sectionHeader(l10n.get('agentSection')),
           _buildAgentEntry(),
           _sectionHeader(l10n.get('modelAndMode')),
           _buildModelSection(provider),
@@ -88,7 +85,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _buildConfigSection(),
           _sectionHeader(l10n.get('language')),
           _buildLanguageSection(),
-          _sectionHeader('主题'),
+          _sectionHeader(l10n.get('theme')),
           _buildThemeSection(),
           const SizedBox(height: 32),
         ],
@@ -98,16 +95,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _sectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-      child: Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade600, letterSpacing: 0.5)),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
+      child: Text(title.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurfaceVariant, letterSpacing: 0.8)),
     );
   }
 
   Widget _sectionCard({required List<Widget> children}) {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 1,
       child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Column(children: children)),
     );
   }
@@ -115,13 +110,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ═══ 1. Providers ═══
 
   Widget _buildAgentEntry() {
+    final l10n = AppLocalizations.of(context);
     return _sectionCard(children: [
       ListTile(
         leading: const Icon(Icons.person),
-        title: const Text('管理智能体'),
-        subtitle: const Text('创建、切换、编辑智能体'),
+        title: Text(l10n.get('createNewAgent')),
+        subtitle: Text(l10n.get('manageAgentDesc')),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgentListScreen())),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgentCreateScreen())),
       ),
     ]);
   }
@@ -130,7 +126,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final l10n = AppLocalizations.of(context);
     return _sectionCard(children: [
       if (s.providers.isEmpty)
-        Padding(padding: const EdgeInsets.all(16), child: Text(l10n.get('noProvider'), style: const TextStyle(color: Colors.grey)))
+        Padding(padding: const EdgeInsets.all(16), child: Text(l10n.get('noProvider'), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)))
       else
         ...s.providers.map((p) => _providerTile(p, s.activeProviderId)),
       Padding(
@@ -139,10 +135,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           icon: const Icon(Icons.add, size: 18),
           label: Text(l10n.get('addProvider')),
           onPressed: () => _showProviderDialog(),
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 40),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
         ),
       ),
     ]);
@@ -150,26 +142,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _providerTile(ProviderConfig p, int? activeId) {
     final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
     final isActive = p.id == activeId;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: isActive ? Colors.green : Colors.transparent, width: 2),
+        side: BorderSide(color: isActive ? scheme.primary : Colors.transparent, width: 2),
       ),
       elevation: 0,
-      color: isActive ? Colors.green.shade50 : null,
+      color: isActive ? scheme.primaryContainer.withValues(alpha: 0.4) : null,
       child: ListTile(
         leading: CircleAvatar(
           radius: 18,
-          backgroundColor: isActive ? Colors.green.shade100 : Colors.grey.shade200,
-          child: Text(p.name[0].toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, color: isActive ? Colors.green.shade800 : Colors.grey.shade700)),
+          backgroundColor: isActive ? scheme.primary.withValues(alpha: 0.2) : scheme.surfaceContainerHighest,
+          child: Text(p.name[0].toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, color: isActive ? scheme.primary : scheme.onSurfaceVariant)),
         ),
         title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
-        subtitle: Text(p.apiBaseUrl, style: const TextStyle(fontSize: 11, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(p.apiBaseUrl, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
           if (p.selectedModel.isNotEmpty)
-            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(4)), child: Text(p.selectedModel, style: TextStyle(fontSize: 10, color: Colors.blue.shade700))),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(4)), child: Text(p.selectedModel, style: TextStyle(fontSize: 10, color: scheme.onSecondaryContainer))),
           const SizedBox(width: 4),
           PopupMenuButton<String>(
             onSelected: (a) {
@@ -180,7 +173,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             itemBuilder: (_) => [
               if (!isActive) PopupMenuItem(value: 'activate', child: Text(l10n.get('setAsCurrent'))),
               PopupMenuItem(value: 'edit', child: Text(l10n.get('edit'))),
-              PopupMenuItem(value: 'delete', child: Text(l10n.get('delete'), style: const TextStyle(color: Colors.red))),
+              PopupMenuItem(value: 'delete', child: Text(l10n.get('delete'), style: TextStyle(color: scheme.error))),
             ],
           ),
         ]),
@@ -240,9 +233,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () { Navigator.pop(ctx); _confirmDeleteProvider(existing); },
-              icon: const Icon(Icons.delete_forever, color: Colors.red, size: 18),
-              label: Text(l10n.get('deleteProvider'), style: const TextStyle(color: Colors.red)),
-              style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+              icon: Icon(Icons.delete_forever, color: Theme.of(context).colorScheme.error, size: 18),
+              label: Text(l10n.get('deleteProvider'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              style: OutlinedButton.styleFrom(side: BorderSide(color: Theme.of(context).colorScheme.error.withValues(alpha: 0.5))),
             ),
           ),
         ],
@@ -269,16 +262,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _confirmDeleteProvider(ProviderConfig p) {
     final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
     showDialog(context: context, builder: (ctx) => AlertDialog(
+      icon: Icon(Icons.warning_amber_rounded, color: scheme.error, size: 32),
       title: Text(l10n.get('confirmDelete')),
       content: Text(l10n.get('deleteProviderConfirm').replaceFirst('\n', '\n') + ' "${p.name}"?'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l10n.get('cancel'))),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () {
-          ref.read(settingsProvider.notifier).deleteProvider(p.id!);
-          _snack('${l10n.get('providerDeleted')} ${p.name}');
-          Navigator.pop(ctx);
-        }, child: Text(l10n.get('delete'))),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
+          onPressed: () {
+            ref.read(settingsProvider.notifier).deleteProvider(p.id!);
+            _snack('${l10n.get('providerDeleted')} ${p.name}');
+            Navigator.pop(ctx);
+          },
+          child: Text(l10n.get('delete')),
+        ),
       ],
     ));
   }
@@ -295,7 +294,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     if (provider == null) {
       return _sectionCard(children: [
-        Padding(padding: const EdgeInsets.all(16), child: Text(l10n.get('configureProviderFirst'), style: const TextStyle(color: Colors.grey))),
+        Padding(padding: const EdgeInsets.all(16), child: Text(l10n.get('configureProviderFirst'), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
       ]);
     }
 
@@ -317,7 +316,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
           ),
           if (provider.selectedModel.isEmpty)
-            Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.get('pleaseEnterModel'), style: const TextStyle(color: Colors.orange, fontSize: 12))),
+            Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.get('pleaseEnterModel'), style: TextStyle(color: Theme.of(context).colorScheme.tertiary, fontSize: 12))),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
@@ -357,7 +356,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               controller: TextEditingController(text: s.silenceThresholdHours.toStringAsFixed(0)),
               onChanged: (v) { final h = double.tryParse(v); if (h != null && h > 0) { ref.read(settingsProvider.notifier).updateSilenceThreshold(h); _snack(l10n.get('updated')); } }))),
           Text(l10n.get('dndPeriods'), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          ...s.dndPeriods.asMap().entries.map((e) => ListTile(contentPadding: EdgeInsets.zero, dense: true, title: Text(e.value.toString()), trailing: IconButton(icon: const Icon(Icons.delete, size: 18, color: Colors.red), onPressed: () { ref.read(settingsProvider.notifier).removeDndPeriod(e.key); _snack(l10n.get('periodDeleted')); }))),
+          ...s.dndPeriods.asMap().entries.map((e) => ListTile(contentPadding: EdgeInsets.zero, dense: true, title: Text(e.value.toString()), trailing: IconButton(icon: Icon(Icons.delete, size: 18, color: Theme.of(context).colorScheme.error), onPressed: () { ref.read(settingsProvider.notifier).removeDndPeriod(e.key); _snack(l10n.get('periodDeleted')); }))),
           TextButton.icon(icon: const Icon(Icons.add, size: 18), label: Text(l10n.get('addPeriod')), onPressed: () => _addDnd(s)),
         ],
       ])),
@@ -402,7 +401,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const Divider(height: 1),
         _listTileRow(Icons.bug_report, l10n.get('debugLogs'), l10n.get('debugLogsDesc'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DebugLogScreen()))),
         const Divider(height: 1),
-        _listTileRow(Icons.extension, '插件管理', '安装、启用或禁用插件', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PluginScreen()))),
+        _listTileRow(Icons.extension, l10n.get('pluginManagement'), l10n.get('pluginManagementDesc'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PluginScreen()))),
         const Divider(height: 1),
         const SizedBox(height: 8),
         OutlinedButton.icon(
@@ -428,27 +427,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 4),
         OutlinedButton.icon(
           onPressed: () => _confirmReset(),
-          icon: const Icon(Icons.delete_forever, color: Colors.red, size: 18),
-          label: Text(l10n.get('resetDefaults'), style: const TextStyle(color: Colors.red)),
-          style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 40), side: const BorderSide(color: Colors.red)),
+          icon: Icon(Icons.delete_forever, color: Theme.of(context).colorScheme.error, size: 18),
+          label: Text(l10n.get('resetDefaults'), style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          style: OutlinedButton.styleFrom(minimumSize: const Size(double.infinity, 40), side: BorderSide(color: Theme.of(context).colorScheme.error.withValues(alpha: 0.5))),
         ),
       ])),
     ]);
   }
 
   Widget _listTileRow(IconData icon, String title, String subtitle, VoidCallback? onTap, {Widget? trailing}) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
         child: Row(children: [
-          Icon(icon, size: 20, color: Colors.grey.shade600),
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: scheme.onPrimaryContainer),
+          ),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: const TextStyle(fontSize: 14)),
-            Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+            Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+            Text(subtitle, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
           ])),
-          if (trailing != null) trailing else if (onTap != null) const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+          if (trailing != null) trailing else if (onTap != null) Icon(Icons.chevron_right, size: 18, color: scheme.onSurfaceVariant),
         ]),
       ),
     );
@@ -456,36 +464,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   void _confirmReset() {
     final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
     showDialog(context: context, builder: (ctx) => AlertDialog(
+      icon: Icon(Icons.warning_amber_rounded, color: scheme.error, size: 32),
       title: Text(l10n.get('resetDefaults')),
       content: Text(l10n.get('resetDefaultsConfirm')),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l10n.get('cancel'))),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () async {
-          Navigator.pop(ctx);
-          await ref.read(settingsProvider.notifier).resetAll();
-          await ref.read(longTermProvider.notifier).clearAll();
-          await ref.read(baseProvider.notifier).clearAll();
-          ref.read(chatProvider.notifier).clearChat();
-          await ref.read(baseProvider.notifier).createSetting(defaultSystemPersona);
-          _snack(l10n.get('resetDone'));
-        }, child: Text(l10n.get('confirmResetAction'))),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
+          onPressed: () async {
+            Navigator.pop(ctx);
+            await ref.read(settingsProvider.notifier).resetAll();
+            await ref.read(longTermProvider.notifier).clearAll();
+            await ref.read(baseProvider.notifier).clearAll();
+            ref.read(chatProvider.notifier).clearChat();
+            await ref.read(baseProvider.notifier).createSetting(defaultSystemPersona);
+            _snack(l10n.get('resetDone'));
+          },
+          child: Text(l10n.get('confirmResetAction')),
+        ),
       ],
     ));
   }
 
   void _confirmClearChatHistory() {
     final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
     showDialog(context: context, builder: (ctx) => AlertDialog(
+      icon: Icon(Icons.delete_sweep, color: scheme.error, size: 32),
       title: Text(l10n.get('clearChatHistory')),
       content: Text(l10n.get('clearChatHistoryConfirm')),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l10n.get('cancel'))),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () async {
-          await ref.read(chatProvider.notifier).clearCurrentAgentChatMessages();
-          Navigator.pop(ctx);
-          _snack(l10n.get('chatHistoryCleared'));
-        }, child: Text(l10n.get('delete'))),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
+          onPressed: () async {
+            await ref.read(chatProvider.notifier).clearCurrentAgentChatMessages();
+            Navigator.pop(ctx);
+            _snack(l10n.get('chatHistoryCleared'));
+          },
+          child: Text(l10n.get('delete')),
+        ),
       ],
     ));
   }
@@ -494,7 +514,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final l10n = AppLocalizations.of(context);
     try {
       final chatState = ref.read(chatProvider);
-      if (chatState.messages.isEmpty) { _snack('暂无聊天记录'); return; }
+      if (chatState.messages.isEmpty) { _snack(l10n.get('noChatHistory')); return; }
       final sb = StringBuffer();
       sb.writeln('=== AI Chat History ===');
       sb.writeln('Export time: ${DateTime.now().toIso8601String()}');
@@ -520,7 +540,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       } catch (_) {}
       _snack('${l10n.get('chatExported')}: ${file.path}');
     } catch (e) {
-      _snack('导出失败: $e', error: true);
+      _snack('${l10n.get('exportFailed')}: $e', error: true);
     }
   }
 
@@ -612,11 +632,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final hasCareSettings = config['care_settings'] != null;
 
       final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.file_upload, color: Theme.of(context).colorScheme.primary, size: 32),
         title: Text(l10n.get('confirmImportTitle')),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(l10n.get('configImportConfirm').replaceFirst('{n}', suppliers.length.toString())),
-          const SizedBox(height: 8),
-          Text(l10n.get('configImportConfirm'), style: const TextStyle(color: Colors.orange, fontSize: 12)),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.get('cancel'))),
@@ -663,11 +682,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (result == null || result.files.isEmpty) return;
 
       final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error, size: 32),
         title: Text(l10n.get('restoreDatabase')),
         content: Text(l10n.get('restoreDbConfirm')),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(l10n.get('cancel'))),
-          FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(ctx, true), child: Text(l10n.get('confirmResetAction'))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Theme.of(context).colorScheme.onError),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.get('confirmResetAction')),
+          ),
         ],
       ));
 
@@ -684,17 +708,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildThemeSection() {
     final s = ref.watch(settingsProvider);
+    final l10n = AppLocalizations.of(context);
     return _sectionCard(children: [
       Padding(padding: const EdgeInsets.all(12), child: Column(children: [
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.brightness_6),
-          title: const Text('主题模式'),
+          title: Text(l10n.get('themeMode')),
           trailing: SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'system', label: Text('自动', style: TextStyle(fontSize: 12))),
-              ButtonSegment(value: 'light', label: Text('浅色', style: TextStyle(fontSize: 12))),
-              ButtonSegment(value: 'dark', label: Text('深色', style: TextStyle(fontSize: 12))),
+            segments: [
+              ButtonSegment(value: 'system', label: Text(l10n.get('autoTheme'), style: const TextStyle(fontSize: 12))),
+              ButtonSegment(value: 'light', label: Text(l10n.get('lightTheme'), style: const TextStyle(fontSize: 12))),
+              ButtonSegment(value: 'dark', label: Text(l10n.get('darkTheme'), style: const TextStyle(fontSize: 12))),
             ],
             selected: {s.themeMode},
             onSelectionChanged: (v) => ref.read(settingsProvider.notifier).updateThemeMode(v.first),
@@ -704,13 +729,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const Icon(Icons.palette),
-          title: const Text('主题色'),
+          title: Text(l10n.get('themeColor')),
           trailing: Wrap(spacing: 6, children: [
             0xFF3F51B5, 0xFFE91E63, 0xFF009688, 0xFF673AB7,
             0xFFFF5722, 0xFF4CAF50, 0xFF2196F3, 0xFFFF9800,
           ].map((c) => GestureDetector(
             onTap: () => ref.read(settingsProvider.notifier).updatePrimaryColor(c),
-            child: Container(width: 28, height: 28, decoration: BoxDecoration(color: Color(c), shape: BoxShape.circle, border: Border.all(color: s.primaryColor == c ? Colors.black : Colors.grey.shade300, width: s.primaryColor == c ? 3 : 1))),
+            child: Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(
+                color: Color(c),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: s.primaryColor == c ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.outlineVariant,
+                  width: s.primaryColor == c ? 3 : 1,
+                ),
+                boxShadow: s.primaryColor == c ? AppTheme.shadowSm : null,
+              ),
+            ),
           )).toList()),
         ),
       ])),
@@ -720,12 +756,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // ═══ 7. Language ═══
 
   Widget _buildLanguageSection() {
+    final scheme = Theme.of(context).colorScheme;
     return _sectionCard(children: [
       Padding(
         padding: const EdgeInsets.all(12),
         child: Row(children: [
-          const Icon(Icons.language, color: Colors.indigo),
-          const SizedBox(width: 16),
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.language, size: 18, color: scheme.onPrimaryContainer),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(AppLocalizations.of(context)!.get('language'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
           ),

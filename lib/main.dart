@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'services/notification_service.dart';
@@ -9,6 +10,7 @@ import 'providers/chat_provider.dart';
 import 'providers/agent_provider.dart';
 import 'providers/settings_provider.dart';
 import 'l10n/app_localizations.dart';
+import 'theme/app_theme.dart';
 import 'screens/chat_screen.dart';
 import 'screens/agent_create_screen.dart';
 
@@ -17,14 +19,20 @@ final localeProvider = StateProvider<Locale?>((ref) => null);
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Phase 0 — minimal sync init: DB + locale + notification (fire-and-forget)
+  final dbFuture = DatabaseService.migrateDefaultPersona(defaultSystemPersona);
+
+  // Fire notification init in background; don't block first frame
   final notificationService = NotificationService();
-  await notificationService.initialize();
+  final notificationInitFuture = notificationService.initialize();
 
-  await DatabaseService.migrateDefaultPersona(defaultSystemPersona);
-
-  await PluginManager.instance.init();
+  // Plugin manager can init async as well
+  PluginManager.instance.init(); // no await — not critical for first frame
 
   final initialLocale = await LocaleService.resolveLocale();
+
+  // Ensure DB migration finishes before providers need it
+  await dbFuture;
 
   runApp(
     ProviderScope(
@@ -35,6 +43,9 @@ void main() async {
       child: const AIApp(),
     ),
   );
+
+  // Complete notification init after first frame (won't block UI)
+  await notificationInitFuture;
 }
 
 class AIApp extends ConsumerWidget {
@@ -43,19 +54,21 @@ class AIApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider) ?? const Locale('en');
-    final agentState = ref.watch(agentProvider);
     final settings = ref.watch(settingsProvider);
     final primary = Color(settings.primaryColor);
 
     ThemeMode themeMode;
     switch (settings.themeMode) {
-      case 'light': themeMode = ThemeMode.light; break;
-      case 'dark': themeMode = ThemeMode.dark; break;
-      default: themeMode = ThemeMode.system;
+      case 'light':
+        themeMode = ThemeMode.light;
+      case 'dark':
+        themeMode = ThemeMode.dark;
+      default:
+        themeMode = ThemeMode.system;
     }
 
     return MaterialApp(
-      title: 'AI 记忆聊天',
+      title: 'AI Memory Chat',
       debugShowCheckedModeBanner: false,
       locale: locale,
       localizationsDelegates: const [
@@ -68,17 +81,31 @@ class AIApp extends ConsumerWidget {
         Locale('en'),
         Locale('zh'),
       ],
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: primary, brightness: Brightness.light),
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: primary, brightness: Brightness.dark),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light(primary),
+      darkTheme: AppTheme.dark(primary),
       themeMode: themeMode,
-      home: agentState.agents.isEmpty ? const OnboardingScreen() : const ChatScreen(),
+      // Keyboard shortcut for sending message with Ctrl+Enter
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.enter):
+            const ActivateIntent(),
+      },
+      home: const _AppShell(),
     );
+  }
+}
+
+/// Shell that decides onboarding vs chat, and wraps keyboard shortcuts.
+class _AppShell extends ConsumerWidget {
+  const _AppShell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final agentState = ref.watch(agentProvider);
+
+    if (agentState.agents.isEmpty) {
+      return const OnboardingScreen();
+    }
+    return const ChatScreen();
   }
 }
 
@@ -87,27 +114,48 @@ class OnboardingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.person_add_alt, size: 80, color: Colors.indigo.shade300),
-            const SizedBox(height: 24),
-            const Text('创建你的第一个智能体', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text('每个人工智能都是一个独特的伙伴', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgentCreateScreen())),
-                icon: const Icon(Icons.add),
-                label: const Text('创建智能体'),
-                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-              ),
-            ),
-          ]),
+          child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    shape: BoxShape.circle,
+                    boxShadow: AppTheme.shadowMd,
+                  ),
+                  child: Icon(Icons.person_add_alt,
+                      size: 56, color: scheme.onPrimaryContainer),
+                ),
+                const SizedBox(height: 32),
+                Text('Create your first agent',
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface)),
+                const SizedBox(height: 8),
+                Text('Each AI is a unique companion',
+                    style: TextStyle(
+                        fontSize: 14, color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 40),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const AgentCreateScreen())),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Create Agent'),
+                  ),
+                ),
+              ]),
         ),
       ),
     );

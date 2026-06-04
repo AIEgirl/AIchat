@@ -1,7 +1,9 @@
 import 'memory_service.dart';
 import 'plan_service.dart';
+import 'group_service.dart';
 import '../models/long_term_memory.dart';
 import '../models/base_memory.dart';
+import '../models/group_shared_memory.dart';
 import 'package:flutter/foundation.dart';
 
 void _tlog(String msg) {
@@ -11,9 +13,10 @@ void _tlog(String msg) {
 class ToolExecutor {
   final MemoryService memoryService;
   final PlanService planService;
+  final GroupService? groupService;
   final List<ToolExecutionLog> executionLogs = [];
 
-  ToolExecutor({required this.memoryService, required this.planService});
+  ToolExecutor({required this.memoryService, required this.planService, this.groupService});
 
   Future<String> execute(String toolName, Map<String, dynamic> arguments) async {
     String result;
@@ -28,6 +31,9 @@ class ToolExecutor {
         break;
       case 'chat':
         result = await _handleChat(arguments);
+        break;
+      case 'chatgroup':
+        result = await _handleChatgroup(arguments);
         break;
       case 'plan':
         result = await _handlePlan(arguments);
@@ -47,9 +53,39 @@ class ToolExecutor {
     final targetId = args['target_id'] as String?;
     final field = args['field'] as String?;
     final content = args['content'] as String?;
+    final groupScope = args['group_scope'] as String?;
 
     if (content == null || content.isEmpty) {
       return '错误: 缺少 content 参数';
+    }
+
+    if (groupScope == 'shared' && groupService != null) {
+      if (action == 'create') {
+        final newId = await groupService!.createSharedMemory(
+          groupId: groupService!.activeGroupId ?? '',
+          field: field ?? 'status',
+          content: content,
+        );
+        return '已创建群共享记忆 $newId [$field]: $content';
+      } else if (action == 'update') {
+        if (targetId == null) {
+          return '错误: update 操作需要 target_id';
+        }
+        final mems =
+            await groupService!.getSharedMemories(groupService!.activeGroupId ?? '');
+        final existing = mems.cast<GroupSharedMemory?>().firstWhere(
+              (m) => m?.id == targetId,
+              orElse: () => null,
+            );
+        if (existing != null) {
+          await groupService!.updateSharedMemory(
+            existing.copyWith(content: content, field: field ?? existing.field),
+          );
+          return '已更新群共享记忆 $targetId: $content';
+        }
+        return '错误: 未找到群共享记忆 $targetId';
+      }
+      return '错误: 无效的 action';
     }
 
     if (memoryType == 'long_term') {
@@ -92,6 +128,19 @@ class ToolExecutor {
       return '错误: target_ids 为空';
     }
 
+    final memorySource = args['memory_source'] as String?;
+    if (memorySource == 'shared' && groupService != null) {
+      final deleted = <String>[];
+      for (final id in targetIds) {
+        final idStr = id.toString();
+        if (idStr.startsWith('GS')) {
+          await groupService!.deleteSharedMemory(idStr);
+          deleted.add(idStr);
+        }
+      }
+      return deleted.isNotEmpty ? '已删除群共享记忆 ${deleted.join(", ")}' : '无有效群共享记忆ID可删除';
+    }
+
     final deleted = <String>[];
     final errors = <String>[];
 
@@ -130,6 +179,11 @@ class ToolExecutor {
   Future<String> _handleChat(Map<String, dynamic> args) async {
     final message = args['message'] as String? ?? '';
     return 'chat 工具已收到消息: $message';
+  }
+
+  Future<String> _handleChatgroup(Map<String, dynamic> args) async {
+    final message = args['message'] as String? ?? '';
+    return 'chatgroup 工具已收到消息: $message';
   }
 
   /// plan 工具：安排未来消息

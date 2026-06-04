@@ -6,6 +6,7 @@ class Agent {
   final String gender;
   final String description;
   final String persona;
+  final String? openingLine;
   final int avatarColor;
   final String? avatarPath;
   final String? chatBackground;
@@ -19,6 +20,7 @@ class Agent {
     this.gender = '',
     this.description = '',
     required this.persona,
+    this.openingLine,
     this.avatarColor = 0xFFE8F5E9,
     this.avatarPath,
     this.chatBackground,
@@ -31,12 +33,14 @@ class Agent {
 
   Agent copyWith({
     String? id, String? name, String? gender, String? description, String? persona,
+    String? openingLine, bool clearOpeningLine = false,
     int? avatarColor, String? avatarPath, String? chatBackground,
     bool? isActive, int? createdAt, int? updatedAt,
   }) {
     return Agent(
       id: id ?? this.id, name: name ?? this.name, gender: gender ?? this.gender,
       description: description ?? this.description, persona: persona ?? this.persona,
+      openingLine: clearOpeningLine ? null : (openingLine ?? this.openingLine),
       avatarColor: avatarColor ?? this.avatarColor, avatarPath: avatarPath ?? this.avatarPath,
       chatBackground: chatBackground ?? this.chatBackground,
       isActive: isActive ?? this.isActive,
@@ -47,7 +51,8 @@ class Agent {
 
   Map<String, dynamic> toMap() => {
     'id': id, 'name': name, 'gender': gender, 'description': description,
-    'persona': persona, 'avatar_color': avatarColor,
+    'persona': persona, 'opening_line': openingLine,
+    'avatar_color': avatarColor,
     'avatar_path': avatarPath, 'chat_background': chatBackground,
     'is_active': isActive ? 1 : 0, 'created_at': createdAt, 'updated_at': updatedAt,
   };
@@ -55,7 +60,8 @@ class Agent {
   factory Agent.fromMap(Map<String, dynamic> map) => Agent(
     id: map['id'] as String, name: map['name'] as String,
     gender: map['gender'] as String? ?? '', description: map['description'] as String? ?? '',
-    persona: map['persona'] as String, avatarColor: map['avatar_color'] as int? ?? 0xFFE8F5E9,
+    persona: map['persona'] as String, openingLine: map['opening_line'] as String?,
+    avatarColor: map['avatar_color'] as int? ?? 0xFFE8F5E9,
     avatarPath: map['avatar_path'] as String?,
     chatBackground: map['chat_background'] as String?,
     isActive: (map['is_active'] as int?) == 1,

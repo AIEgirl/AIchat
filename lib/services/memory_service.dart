@@ -8,6 +8,7 @@ class MemoryService {
   int _shortTermSeq = 0;
   int maxShortTermRounds = 20;
   String? _agentId;
+  String? _groupId;
 
   List<ShortTermMessage> get shortTermMessages => List.unmodifiable(_shortTermMessages);
 
@@ -20,6 +21,12 @@ class MemoryService {
   }
 
   String? get agentId => _agentId;
+
+  void setGroupId(String? id) {
+    _groupId = id;
+  }
+
+  String? get groupId => _groupId;
 
   Future<void> loadShortTermFromDb(int limit) async {
     final msgs = await DatabaseService.getShortTermMessages(limit: limit, agentId: _agentId);
@@ -78,7 +85,7 @@ class MemoryService {
   Future<String> createLongTermMemory({required String field, required String content}) async {
     final maxNum = await DatabaseService.getMaxLongTermIdNumber(agentId: _agentId);
     final newId = 'L${(maxNum + 1).toString().padLeft(3, '0')}';
-    final memory = LongTermMemory(id: newId, field: field, content: content, agentId: _agentId);
+    final memory = LongTermMemory(id: newId, field: field, content: content, agentId: _agentId, groupId: _groupId);
     await DatabaseService.insertLongTermMemory(memory);
     return newId;
   }
@@ -113,7 +120,7 @@ class MemoryService {
   Future<String> createBaseMemory({required String type, required String content}) async {
     final maxNum = await DatabaseService.getMaxBaseIdNumber(agentId: _agentId);
     final newId = 'B${(maxNum + 1).toString().padLeft(3, '0')}';
-    final memory = BaseMemory(id: newId, type: type, content: content, agentId: _agentId);
+    final memory = BaseMemory(id: newId, type: type, content: content, agentId: _agentId, groupId: _groupId);
     await DatabaseService.insertBaseMemory(memory);
     return newId;
   }

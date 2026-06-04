@@ -316,69 +316,174 @@ class ApiService {
     throw ApiException('Vision API error (${response.statusCode}): ${response.body}');
   }
 
-  static List<Map<String, dynamic>> getToolDefinitions() {
+  static List<Map<String, dynamic>> getToolDefinitions({bool isGroupChat = false}) {
+    if (isGroupChat) return _getGroupToolDefinitions();
+    return _getPrivateToolDefinitions();
+  }
+
+  static List<Map<String, dynamic>> _getPrivateToolDefinitions() {
     return [
-      {
-        'type': 'function',
-        'function': {
-          'name': 'remember',
-          'description': '记住一条当前状态或过去的事件。可用于创建/更新长期记忆，或向基础记忆追加事件。',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'memory_type': {'type': 'string', 'enum': ['long_term', 'base'], 'description': 'long_term 表示更新当前有效信息，base 表示追加历史事件。'},
-              'action': {'type': 'string', 'enum': ['create', 'update'], 'description': '创建新条目或更新原有条目。更新时必须提供 target_id。'},
-              'target_id': {'type': 'string', 'description': '当 action 为 update 时，要更新的条目序号（如 L003）。'},
-              'field': {'type': 'string', 'enum': ['time', 'location', 'current_events', 'characters', 'relationships', 'goals', 'thoughts', 'status', 'to_do'], 'description': '长期记忆的字段名。base 类型无需此参数。'},
-              'content': {'type': 'string', 'description': '要记住的具体内容。如果是更新，提供完整的新内容。'},
-            },
-            'required': ['memory_type', 'action'],
-          },
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'forget',
-          'description': '删除不再有用的长期记忆条目或基础记忆中的事件条目。设定条目不可删除。',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'target_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': '要删除的条目序号列表，如 ["L003", "B007"]。'},
-            },
-            'required': ['target_ids'],
-          },
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'chat',
-          'description': '向用户发送自然语言回复。在所有记忆操作完成后，用它来最终回复。',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'message': {'type': 'string', 'description': '回复给用户的文本。'},
-            },
-            'required': ['message'],
-          },
-        },
-      },
-      {
-        'type': 'function',
-        'function': {
-          'name': 'plan',
-          'description': '安排一条未来发送的消息。例如提醒或主动关心。',
-          'parameters': {
-            'type': 'object',
-            'properties': {
-              'send_time': {'type': 'string', 'description': "发送时间：相对时间如 '30m' 表示30分钟后，'2h' 表示2小时后，或 ISO 8601 具体时间。"},
-              'message': {'type': 'string', 'description': '到时间后要发送的消息内容。'},
-            },
-            'required': ['send_time', 'message'],
-          },
-        },
-      },
+      _rememberTool(),
+      _forgetTool(),
+      _chatTool(),
+      _planTool(),
     ];
+  }
+
+  static List<Map<String, dynamic>> _getGroupToolDefinitions() {
+    return [
+      _rememberGroupTool(),
+      _forgetGroupTool(),
+      _chatgroupTool(),
+      _planGroupTool(),
+    ];
+  }
+
+  static Map<String, dynamic> _rememberTool() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'remember',
+        'description': '记住一条当前状态或过去的事件。可用于创建/更新长期记忆，或向基础记忆追加事件。',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'memory_type': {'type': 'string', 'enum': ['long_term', 'base'], 'description': 'long_term 表示更新当前有效信息，base 表示追加历史事件。'},
+            'action': {'type': 'string', 'enum': ['create', 'update'], 'description': '创建新条目或更新原有条目。更新时必须提供 target_id。'},
+            'target_id': {'type': 'string', 'description': '当 action 为 update 时，要更新的条目序号（如 L003）。'},
+            'field': {'type': 'string', 'enum': ['time', 'location', 'current_events', 'characters', 'relationships', 'goals', 'thoughts', 'status', 'to_do'], 'description': '长期记忆的字段名。base 类型无需此参数。'},
+            'content': {'type': 'string', 'description': '要记住的具体内容。如果是更新，提供完整的新内容。'},
+          },
+          'required': ['memory_type', 'action'],
+        },
+      },
+    };
+  }
+
+  static Map<String, dynamic> _rememberGroupTool() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'remember',
+        'description': '记住一条信息。可根据情况选择个人范围（只有你知道）或共享范围（群内所有人都知道）。',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'memory_type': {'type': 'string', 'enum': ['long_term', 'base'], 'description': 'long_term 表示更新当前有效信息，base 表示追加历史事件。'},
+            'action': {'type': 'string', 'enum': ['create', 'update'], 'description': '创建新条目或更新原有条目。更新时必须提供 target_id。'},
+            'group_scope': {'type': 'string', 'enum': ['personal', 'shared'], 'description': 'personal=只有你自己的记忆，shared=群共享记忆（所有人都知道）。默认 personal。'},
+            'target_id': {'type': 'string', 'description': '当 action 为 update 时，要更新的条目序号。'},
+            'field': {'type': 'string', 'enum': ['time', 'location', 'current_events', 'characters', 'relationships', 'goals', 'thoughts', 'status', 'to_do'], 'description': '长期记忆的字段名。'},
+            'content': {'type': 'string', 'description': '要记住的具体内容。'},
+          },
+          'required': ['memory_type', 'action', 'content'],
+        },
+      },
+    };
+  }
+
+  static Map<String, dynamic> _forgetTool() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'forget',
+        'description': '删除不再有用的长期记忆条目或基础记忆中的事件条目。设定条目不可删除。',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'target_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': '要删除的条目序号列表，如 ["L003", "B007"]。'},
+          },
+          'required': ['target_ids'],
+        },
+      },
+    };
+  }
+
+  static Map<String, dynamic> _forgetGroupTool() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'forget',
+        'description': '删除不再有用的记忆条目。可指定来源是个人记忆还是群共享记忆。',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'memory_source': {'type': 'string', 'enum': ['personal', 'shared'], 'description': 'personal=你个人的群内记忆，shared=群共享记忆。默认 personal。'},
+            'target_ids': {'type': 'array', 'items': {'type': 'string'}, 'description': '要删除的条目序号列表。'},
+          },
+          'required': ['target_ids'],
+        },
+      },
+    };
+  }
+
+  static Map<String, dynamic> _chatTool() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'chat',
+        'description': '向用户发送自然语言回复。在所有记忆操作完成后，用它来最终回复。',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'message': {'type': 'string', 'description': '回复给用户的文本。'},
+          },
+          'required': ['message'],
+        },
+      },
+    };
+  }
+
+  static Map<String, dynamic> _chatgroupTool() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'chatgroup',
+        'description': '在群聊中发送一条消息。这是你在群聊中发言的唯一方式。',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'message': {'type': 'string', 'description': '要发送到群聊中的内容。'},
+          },
+          'required': ['message'],
+        },
+      },
+    };
+  }
+
+  static Map<String, dynamic> _planTool() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'plan',
+        'description': '安排一条未来发送的消息。例如提醒或主动关心。',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'send_time': {'type': 'string', 'description': "发送时间：相对时间如 '30m' 表示30分钟后，'2h' 表示2小时后，或 ISO 8601 具体时间。"},
+            'message': {'type': 'string', 'description': '到时间后要发送的消息内容。'},
+          },
+          'required': ['send_time', 'message'],
+        },
+      },
+    };
+  }
+
+  static Map<String, dynamic> _planGroupTool() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'plan',
+        'description': '安排一条未来在群聊中发送的消息。例如提醒或主动关心。',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'send_time': {'type': 'string', 'description': "发送时间：相对时间如 '30m' 表示30分钟后，'2h' 表示2小时后，或 ISO 8601 具体时间。"},
+            'message': {'type': 'string', 'description': '到时间后要在群聊中发送的消息内容。'},
+          },
+          'required': ['send_time', 'message'],
+        },
+      },
+    };
   }
 }

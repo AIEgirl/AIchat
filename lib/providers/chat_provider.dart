@@ -137,6 +137,17 @@ class ChatNotifier extends StateNotifier<ChatState> {
   Future<void> reloadChatFromDb([String? agentId]) async {
     state = state.copyWith(messages: []);
     await _loadChatMessagesFromDb(agentId: agentId);
+    final effectiveId = agentId ?? _agentId;
+    if (state.messages.isEmpty && effectiveId != null) {
+      final agent = _ref.read(agentProvider).agents.where((a) => a.id == effectiveId).firstOrNull;
+      if (agent?.openingLine != null && agent!.openingLine!.isNotEmpty) {
+        _log('Sending opening line for agent ${agent.name}');
+        final shortMsg = _memoryService.addShortTermMessage(role: 'assistant', content: agent.openingLine!);
+        final aiMsg = ChatMessage(role: 'assistant', content: agent.openingLine!, shortMemId: shortMsg.id);
+        state = state.copyWith(messages: [...state.messages, aiMsg]);
+        _saveChatMessageToDb(aiMsg);
+      }
+    }
   }
 
   /// 清空当前智能体的聊天记录

@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart' as pp;
 import '../providers/agent_provider.dart';
 import '../services/agent_export_service.dart';
+import '../l10n/app_localizations.dart';
 import 'agent_create_screen.dart';
 
 class AgentListScreen extends ConsumerWidget {
@@ -15,16 +16,20 @@ class AgentListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(agentProvider);
     final agents = state.agents;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('智能体管理'),
+        title: Text(l10n.get('agentManagement')),
         actions: [
-          IconButton(icon: const Icon(Icons.file_download), tooltip: '导入', onPressed: () => _importAgent(context, ref)),
+          IconButton(
+              icon: const Icon(Icons.file_download),
+              tooltip: l10n.get('importAgent'),
+              onPressed: () => _importAgent(context, ref)),
         ],
       ),
       body: agents.isEmpty
-          ? const Center(child: Text('暂无智能体'))
+          ? Center(child: Text(l10n.get('noAgents')))
           : ListView.builder(
               padding: const EdgeInsets.all(12),
               itemCount: agents.length,
@@ -34,31 +39,80 @@ class AgentListScreen extends ConsumerWidget {
                 return Card(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: isActive ? Colors.green : Colors.transparent, width: 2),
+                    side: BorderSide(
+                        color: isActive ? Colors.green : Colors.transparent,
+                        width: 2),
                   ),
                   color: isActive ? Colors.green.shade50 : null,
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Color(agent.avatarColor),
-                      child: Text(agent.name.isNotEmpty ? agent.name[0] : '?', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(
+                          agent.name.isNotEmpty ? agent.name[0] : '?',
+                          style:
+                              const TextStyle(fontWeight: FontWeight.bold)),
                     ),
                     title: Row(children: [
-                      Expanded(child: Text(agent.name, style: const TextStyle(fontWeight: FontWeight.w500))),
-                      if (isActive) Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(4)), child: const Text('当前', style: TextStyle(fontSize: 10, color: Colors.green))),
+                      Expanded(
+                          child: Text(agent.name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w500))),
+                      if (isActive)
+                        Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                                color: Colors.green.shade100,
+                                borderRadius: BorderRadius.circular(4)),
+                            child: Text(l10n.get('current'),
+                                style: const TextStyle(
+                                    fontSize: 10, color: Colors.green))),
                     ]),
-                    subtitle: Text(agent.description.isNotEmpty ? agent.description : agent.gender, maxLines: 1, overflow: TextOverflow.ellipsis),
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      if (!isActive)
-                        IconButton(icon: const Icon(Icons.check_circle_outline, color: Colors.green), tooltip: '切换到此智能体', onPressed: () {
-                          ref.read(agentProvider.notifier).setActiveAgent(agent.id);
-                          Navigator.pop(context);
-                        }),
-                      IconButton(icon: const Icon(Icons.edit, size: 20), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AgentCreateScreen(agent: agent)))),
-                      IconButton(icon: const Icon(Icons.file_upload, size: 20), tooltip: '导出', onPressed: () => _exportAgent(context, ref, agent)),
-                      IconButton(icon: const Icon(Icons.delete, size: 20, color: Colors.red), onPressed: () => _confirmDelete(context, ref, agent)),
-                    ]),
+                    subtitle: Text(
+                        agent.description.isNotEmpty
+                            ? agent.description
+                            : agent.gender,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (!isActive)
+                            IconButton(
+                                icon: const Icon(Icons.check_circle_outline,
+                                    color: Colors.green),
+                                tooltip: l10n.get('switchToThisAgent'),
+                                onPressed: () {
+                                  ref
+                                      .read(agentProvider.notifier)
+                                      .setActiveAgent(agent.id);
+                                  Navigator.pop(context);
+                                }),
+                          IconButton(
+                              icon: const Icon(Icons.edit, size: 20),
+                              onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => AgentCreateScreen(
+                                          agent: agent)))),
+                          IconButton(
+                              icon:
+                                  const Icon(Icons.file_upload, size: 20),
+                              tooltip: l10n.get('exportAgent'),
+                              onPressed: () =>
+                                  _exportAgent(context, ref, agent)),
+                          IconButton(
+                              icon: const Icon(Icons.delete,
+                                  size: 20, color: Colors.red),
+                              onPressed: () =>
+                                  _confirmDelete(context, ref, agent)),
+                        ]),
                     onTap: () {
-                      if (!isActive) ref.read(agentProvider.notifier).setActiveAgent(agent.id);
+                      if (!isActive) {
+                        ref
+                            .read(agentProvider.notifier)
+                            .setActiveAgent(agent.id);
+                      }
                       Navigator.pop(context);
                     },
                   ),
@@ -66,25 +120,45 @@ class AgentListScreen extends ConsumerWidget {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgentCreateScreen())),
+        onPressed: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AgentCreateScreen())),
         child: const Icon(Icons.add),
       ),
     );
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref, dynamic agent) {
+    final l10n = AppLocalizations.of(context);
     final isActive = ref.read(agentProvider).currentAgent?.id == agent.id;
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('确认删除'),
-      content: Text('删除智能体"${agent.name}"将同时清除其所有记忆和聊天记录，不可恢复。${isActive ? "\n\n注意：这是当前激活的智能体。" : ""}'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () { ref.read(agentProvider.notifier).deleteAgent(agent.id); Navigator.pop(ctx); Navigator.pop(context); }, child: const Text('删除')),
-      ],
-    ));
+    final activeNote = isActive ? l10n.get('activeAgentNote') : '';
+    showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+              title: Text(l10n.get('confirmDeleteAgentTitle')),
+              content: Text(l10n.getP('confirmDeleteAgentContent', {
+                'name': agent.name,
+                'activeNote': activeNote,
+              })),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(l10n.get('cancel'))),
+                FilledButton(
+                    style: FilledButton.styleFrom(
+                        backgroundColor: Colors.red),
+                    onPressed: () {
+                      ref.read(agentProvider.notifier).deleteAgent(agent.id);
+                      Navigator.pop(ctx);
+                      Navigator.pop(context);
+                    },
+                    child: Text(l10n.get('delete'))),
+              ],
+            ));
   }
 
-  void _exportAgent(BuildContext context, WidgetRef ref, dynamic agent) async {
+  void _exportAgent(
+      BuildContext context, WidgetRef ref, dynamic agent) async {
+    final l10n = AppLocalizations.of(context);
     try {
       final data = await AgentExportService.exportAgent(agent);
       final jsonStr = const JsonEncoder.withIndent('  ').convert(data);
@@ -93,62 +167,89 @@ class AgentListScreen extends ConsumerWidget {
       final file = File('${dir.path}/$fileName');
       await file.writeAsString(jsonStr);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已导出: $fileName (${dir.path})')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                l10n.getP('agentExported', {'path': '${dir.path}/$fileName'}))));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导出失败: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${l10n.get('agentExportFailed')}: $e')));
       }
     }
   }
 
   void _importAgent(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
+      final result = await FilePicker.platform
+          .pickFiles(type: FileType.any, allowMultiple: false);
       if (result == null || result.files.isEmpty) return;
       final file = File(result.files.single.path!);
       final content = await file.readAsString();
       final data = jsonDecode(content) as Map<String, dynamic>;
       if (data['version'] == null) {
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无效的智能体文件格式')));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(l10n.get('invalidAgentFile'))));
+        }
         return;
       }
       final imported = await AgentExportService.importAgent(data);
 
       if (!context.mounted) return;
-      final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-        title: const Text('确认导入'),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('名称: ${imported.name}'),
-          if (imported.gender.isNotEmpty) Text('性别: ${imported.gender}'),
-          if (imported.description.isNotEmpty) Text('简介: ${imported.description}'),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('导入')),
-        ],
-      ));
+      final confirmed =
+          await showDialog<bool>(context: context, builder: (ctx) {
+        return AlertDialog(
+          title: Text(l10n.get('confirmImportTitle')),
+          content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${l10n.get('nameLabel')}: ${imported.name}'),
+                if (imported.gender.isNotEmpty)
+                  Text('${l10n.get('gender')}: ${imported.gender}'),
+                if (imported.description.isNotEmpty)
+                  Text(
+                      '${l10n.get('description')}: ${imported.description}'),
+              ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(l10n.get('cancel'))),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(l10n.get('importAgent'))),
+          ],
+        );
+      });
 
       if (confirmed == true) {
         await ref.read(agentProvider.notifier).createAgent(
-          name: imported.name, gender: imported.gender,
-          description: imported.description, persona: imported.persona,
-          avatarColor: imported.avatarColor,
-        );
+              name: imported.name,
+              gender: imported.gender,
+              description: imported.description,
+              persona: imported.persona,
+              avatarColor: imported.avatarColor,
+            );
         final agents = ref.read(agentProvider).agents;
         final newAgent = agents.last;
         if (imported.avatarPath != null || imported.chatBackground != null) {
           ref.read(agentProvider.notifier).updateAgent(newAgent.copyWith(
-            avatarPath: imported.avatarPath, chatBackground: imported.chatBackground,
-          ));
+                avatarPath: imported.avatarPath,
+                chatBackground: imported.chatBackground,
+              ));
         }
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已导入: ${imported.name}')));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                  l10n.getP('agentImported', {'name': imported.name}))));
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${l10n.get('agentImportFailed')}: $e')));
       }
     }
   }

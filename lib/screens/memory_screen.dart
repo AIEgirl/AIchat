@@ -4,6 +4,7 @@ import '../providers/memory_provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/long_term_memory.dart';
 import '../models/base_memory.dart';
+import '../l10n/app_localizations.dart';
 
 class MemoryScreen extends ConsumerStatefulWidget {
   const MemoryScreen({super.key});
@@ -30,15 +31,16 @@ class _MemoryScreenState extends ConsumerState<MemoryScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('记忆管理'),
+        title: Text(l10n.get('memoryManagementTitle')),
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: '短期记忆'),
-            Tab(text: '长期记忆'),
-            Tab(text: '基础记忆'),
+          tabs: [
+            Tab(text: l10n.get('shortTermTab')),
+            Tab(text: l10n.get('longTermTab')),
+            Tab(text: l10n.get('baseMemoryTab')),
           ],
         ),
       ),
@@ -54,7 +56,7 @@ class _MemoryScreenState extends ConsumerState<MemoryScreen>
   }
 }
 
-// ─── 短期记忆标签页 ──────────────────
+// ─── Short-term Memory Tab ──────────────────
 
 class _ShortTermTab extends ConsumerWidget {
   const _ShortTermTab();
@@ -63,6 +65,7 @@ class _ShortTermTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final memoryService = ref.read(memoryServiceProvider);
     final messages = memoryService.shortTermMessages;
+    final l10n = AppLocalizations.of(context);
 
     return Column(
       children: [
@@ -71,14 +74,14 @@ class _ShortTermTab extends ConsumerWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('当前轮数: ${messages.length}',
+              Text(l10n.getP('currentRounds', {'n': messages.length.toString()}),
                   style: const TextStyle(fontSize: 16)),
               TextButton.icon(
                 onPressed: () {
                   ref.read(chatProvider.notifier).clearChat();
                 },
                 icon: const Icon(Icons.delete),
-                label: const Text('清空'),
+                label: Text(l10n.get('clearAll')),
               ),
             ],
           ),
@@ -99,9 +102,11 @@ class _ShortTermTab extends ConsumerWidget {
                 ),
                 title: Text(
                   '${msg.id} [${msg.role}]',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text(msg.content, maxLines: 3, overflow: TextOverflow.ellipsis),
+                subtitle: Text(msg.content,
+                    maxLines: 3, overflow: TextOverflow.ellipsis),
               );
             },
           ),
@@ -111,7 +116,7 @@ class _ShortTermTab extends ConsumerWidget {
   }
 }
 
-// ─── 长期记忆标签页 ──────────────────
+// ─── Long-term Memory Tab ──────────────────
 
 class _LongTermTab extends ConsumerWidget {
   const _LongTermTab();
@@ -119,6 +124,7 @@ class _LongTermTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(longTermProvider);
+    final l10n = AppLocalizations.of(context);
 
     return Column(
       children: [
@@ -128,28 +134,30 @@ class _LongTermTab extends ConsumerWidget {
             TextButton.icon(
               onPressed: () => _showCreateDialog(context, ref),
               icon: const Icon(Icons.add),
-              label: const Text('手动新增'),
+              label: Text(l10n.get('manualAdd')),
             ),
             TextButton.icon(
               onPressed: () => _confirmClear(context, ref),
               icon: const Icon(Icons.delete_forever),
-              label: const Text('清空全部'),
+              label: Text(l10n.get('clearAllMemory')),
             ),
           ],
         ),
         Expanded(
           child: state.memories.isEmpty
-              ? const Center(child: Text('暂无长期记忆'))
+              ? Center(child: Text(l10n.get('noLongTermMemory')))
               : ListView.builder(
                   itemCount: state.memories.length,
                   itemBuilder: (_, i) {
                     final m = state.memories[i];
                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      margin:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       child: ListTile(
                         title: Text(
                           '${m.id} [${m.field}]',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(m.content),
                         trailing: Row(
@@ -157,12 +165,16 @@ class _LongTermTab extends ConsumerWidget {
                           children: [
                             IconButton(
                               icon: const Icon(Icons.edit, size: 20),
-                              onPressed: () => _showEditDialog(context, ref, m),
+                              onPressed: () =>
+                                  _showEditDialog(context, ref, m),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                              icon: Icon(Icons.delete,
+                                  size: 20, color: Theme.of(context).colorScheme.error),
                               onPressed: () {
-                                ref.read(longTermProvider.notifier).deleteMemory(m.id);
+                                ref
+                                    .read(longTermProvider.notifier)
+                                    .deleteMemory(m.id);
                               },
                             ),
                           ],
@@ -174,14 +186,17 @@ class _LongTermTab extends ConsumerWidget {
         ),
         Padding(
           padding: const EdgeInsets.all(8),
-          child: Text('共 ${state.memories.length} 条长期记忆',
-              style: const TextStyle(color: Colors.grey)),
+          child: Text(
+              l10n.getP('totalLongTermMemories',
+                  {'n': state.memories.length.toString()}),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ),
       ],
     );
   }
 
   void _showCreateDialog(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final contentController = TextEditingController();
     String selectedField = 'time';
 
@@ -189,13 +204,13 @@ class _LongTermTab extends ConsumerWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('新增长期记忆'),
+          title: Text(l10n.get('addLongTermMemory')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
                 initialValue: selectedField,
-                decoration: const InputDecoration(labelText: '字段'),
+                decoration: InputDecoration(labelText: l10n.get('field')),
                 items: LongTermMemory.validFields.map((f) {
                   return DropdownMenuItem(value: f, child: Text(f));
                 }).toList(),
@@ -204,7 +219,7 @@ class _LongTermTab extends ConsumerWidget {
               const SizedBox(height: 12),
               TextField(
                 controller: contentController,
-                decoration: const InputDecoration(labelText: '内容'),
+                decoration: InputDecoration(labelText: l10n.get('content')),
                 maxLines: 3,
               ),
             ],
@@ -212,20 +227,20 @@ class _LongTermTab extends ConsumerWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
+              child: Text(l10n.get('cancel')),
             ),
             FilledButton(
               onPressed: () async {
                 if (contentController.text.trim().isNotEmpty) {
                   await ref.read(memoryServiceProvider).createLongTermMemory(
-                    field: selectedField,
-                    content: contentController.text.trim(),
-                  );
+                        field: selectedField,
+                        content: contentController.text.trim(),
+                      );
                   ref.read(longTermProvider.notifier).loadMemories();
                   Navigator.pop(ctx);
                 }
               },
-              child: const Text('确认'),
+              child: Text(l10n.get('confirm')),
             ),
           ],
         ),
@@ -233,30 +248,36 @@ class _LongTermTab extends ConsumerWidget {
     );
   }
 
-  void _showEditDialog(BuildContext context, WidgetRef ref, LongTermMemory m) {
+  void _showEditDialog(
+      BuildContext context, WidgetRef ref, LongTermMemory m) {
+    final l10n = AppLocalizations.of(context);
     final contentController = TextEditingController(text: m.content);
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('编辑 ${m.id} [${m.field}]'),
+        title: Text(l10n.getP('editMemoryTitle', {
+          'id': m.id,
+          'field': m.field,
+        })),
         content: TextField(
           controller: contentController,
-          decoration: const InputDecoration(labelText: '内容'),
+          decoration: InputDecoration(labelText: l10n.get('content')),
           maxLines: 3,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(l10n.get('cancel')),
           ),
           FilledButton(
             onPressed: () {
-              final updated = m.copyWith(content: contentController.text.trim());
+              final updated =
+                  m.copyWith(content: contentController.text.trim());
               ref.read(longTermProvider.notifier).updateMemory(updated);
               Navigator.pop(ctx);
             },
-            child: const Text('保存'),
+            child: Text(l10n.get('save')),
           ),
         ],
       ),
@@ -264,23 +285,26 @@ class _LongTermTab extends ConsumerWidget {
   }
 
   void _confirmClear(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认清空'),
-        content: const Text('确定要清空所有长期记忆吗？此操作不可撤销。'),
+        icon: Icon(Icons.warning_amber_rounded, color: scheme.error, size: 32),
+        title: Text(l10n.get('confirmClearAllTitle')),
+        content: Text(l10n.get('confirmClearAllContent')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(l10n.get('cancel')),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
             onPressed: () {
               ref.read(longTermProvider.notifier).clearAll();
               Navigator.pop(ctx);
             },
-            child: const Text('确认清空'),
+            child: Text(l10n.get('confirmClearAction')),
           ),
         ],
       ),
@@ -288,7 +312,7 @@ class _LongTermTab extends ConsumerWidget {
   }
 }
 
-// ─── 基础记忆标签页 ──────────────────
+// ─── Base Memory Tab ──────────────────
 
 class _BaseMemoryTab extends ConsumerWidget {
   const _BaseMemoryTab();
@@ -296,8 +320,10 @@ class _BaseMemoryTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(baseProvider);
-    final settings = state.memories.where((m) => m.isSetting).toList();
+    final settings =
+        state.memories.where((m) => m.isSetting).toList();
     final events = state.memories.where((m) => m.isEvent).toList();
+    final l10n = AppLocalizations.of(context);
 
     return Column(
       children: [
@@ -307,17 +333,17 @@ class _BaseMemoryTab extends ConsumerWidget {
             TextButton.icon(
               onPressed: () => _showCreateDialog(context, ref),
               icon: const Icon(Icons.add),
-              label: const Text('新增设定'),
+              label: Text(l10n.get('addSetting')),
             ),
             TextButton.icon(
               onPressed: () => _confirmClearEvents(context, ref),
               icon: const Icon(Icons.delete_forever),
-              label: const Text('清空事件'),
+              label: Text(l10n.get('clearEvents')),
             ),
             TextButton.icon(
               onPressed: () => _confirmClearAll(context, ref),
               icon: const Icon(Icons.delete_forever),
-              label: const Text('重置全部'),
+              label: Text(l10n.get('resetAll')),
             ),
           ],
         ),
@@ -325,14 +351,17 @@ class _BaseMemoryTab extends ConsumerWidget {
           child: ListView(
             children: [
               if (settings.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Text('设定条目（不可被 AI 遗忘）:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Text(l10n.get('settingItemsLabel'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
                 ...settings.map((m) => Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      color: Colors.blue.shade50,
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
                       child: ListTile(
                         title: Text(m.id,
                             style: const TextStyle(
@@ -340,28 +369,35 @@ class _BaseMemoryTab extends ConsumerWidget {
                         subtitle: Text(m.content),
                         trailing: IconButton(
                           icon: const Icon(Icons.edit, size: 20),
-                          onPressed: () => _showEditDialog(context, ref, m),
+                          onPressed: () =>
+                              _showEditDialog(context, ref, m),
                         ),
                       ),
                     )),
               ],
               if (events.isNotEmpty) ...[
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Text('事件条目（AI 可遗忘）:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Text(l10n.get('eventItemsLabel'),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
                 ...events.map((m) => Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       child: ListTile(
                         title: Text(m.id,
                             style: const TextStyle(
                                 fontSize: 12, fontWeight: FontWeight.bold)),
                         subtitle: Text(m.content),
                         trailing: IconButton(
-                          icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                          icon: Icon(Icons.delete,
+                              size: 20, color: Theme.of(context).colorScheme.error),
                           onPressed: () {
-                            ref.read(baseProvider.notifier).deleteMemory(m.id);
+                            ref
+                                .read(baseProvider.notifier)
+                                .deleteMemory(m.id);
                           },
                         ),
                       ),
@@ -373,29 +409,33 @@ class _BaseMemoryTab extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.all(8),
           child: Text(
-              '设定 ${settings.length} 条 | 事件 ${events.length} 条',
-              style: const TextStyle(color: Colors.grey)),
+              l10n.getP('baseMemoryCount', {
+                'settings': settings.length.toString(),
+                'events': events.length.toString(),
+              }),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ),
       ],
     );
   }
 
   void _showCreateDialog(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final contentController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('新增基础设定'),
+        title: Text(l10n.get('addBaseSetting')),
         content: TextField(
           controller: contentController,
-          decoration: const InputDecoration(labelText: '设定内容'),
+          decoration: InputDecoration(labelText: l10n.get('settingContent')),
           maxLines: 3,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(l10n.get('cancel')),
           ),
           FilledButton(
             onPressed: () async {
@@ -406,29 +446,31 @@ class _BaseMemoryTab extends ConsumerWidget {
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('确认'),
+            child: Text(l10n.get('confirm')),
           ),
         ],
       ),
     );
   }
 
-  void _showEditDialog(BuildContext context, WidgetRef ref, BaseMemory m) {
+  void _showEditDialog(
+      BuildContext context, WidgetRef ref, BaseMemory m) {
+    final l10n = AppLocalizations.of(context);
     final contentController = TextEditingController(text: m.content);
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('编辑 ${m.id}'),
+        title: Text(l10n.getP('editBaseItem', {'id': m.id})),
         content: TextField(
           controller: contentController,
-          decoration: const InputDecoration(labelText: '内容'),
+          decoration: InputDecoration(labelText: l10n.get('content')),
           maxLines: 3,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(l10n.get('cancel')),
           ),
           FilledButton(
             onPressed: () {
@@ -441,7 +483,7 @@ class _BaseMemoryTab extends ConsumerWidget {
               ref.read(baseProvider.notifier).updateMemory(updated);
               Navigator.pop(ctx);
             },
-            child: const Text('保存'),
+            child: Text(l10n.get('save')),
           ),
         ],
       ),
@@ -449,23 +491,26 @@ class _BaseMemoryTab extends ConsumerWidget {
   }
 
   void _confirmClearEvents(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认清空事件'),
-        content: const Text('确定要清空所有基础事件条目吗？设定条目不会被删除。'),
+        icon: Icon(Icons.warning_amber_rounded, color: scheme.error, size: 32),
+        title: Text(l10n.get('confirmClearEventsTitle')),
+        content: Text(l10n.get('confirmClearEventsContent')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(l10n.get('cancel')),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
             onPressed: () {
               ref.read(baseProvider.notifier).clearEvents();
               Navigator.pop(ctx);
             },
-            child: const Text('确认清空'),
+            child: Text(l10n.get('confirmClearAction')),
           ),
         ],
       ),
@@ -473,23 +518,26 @@ class _BaseMemoryTab extends ConsumerWidget {
   }
 
   void _confirmClearAll(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('确认重置'),
-        content: const Text('确定要清空所有基础记忆（包括设定）吗？此操作不可撤销。'),
+        icon: Icon(Icons.warning_amber_rounded, color: scheme.error, size: 32),
+        title: Text(l10n.get('confirmResetAllTitle')),
+        content: Text(l10n.get('confirmResetAllContent')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
+            child: Text(l10n.get('cancel')),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
             onPressed: () {
               ref.read(baseProvider.notifier).clearAll();
               Navigator.pop(ctx);
             },
-            child: const Text('确认重置'),
+            child: Text(l10n.get('confirmResetAction')),
           ),
         ],
       ),

@@ -151,6 +151,162 @@ class AppLocalizations {
       'chatHistoryCleared': 'Chat history cleared',
       'exportChatHistory': 'Export Chat History',
       'chatExported': 'Chat history exported',
+      // New keys — agent creation
+      'nameLabel': 'Name *',
+      'nameRequired': 'Please enter agent name',
+      'gender': 'Gender',
+      'female': 'Female',
+      'male': 'Male',
+      'otherGender': 'Other',
+      'secret': 'Secret',
+      'description': 'Description',
+      'avatar': 'Avatar',
+      'useImageAvatar': 'Use image avatar',
+      'takePhoto': 'Take photo',
+      'album': 'Album',
+      'personaPrompt': 'Persona Prompt',
+      'placeholderHint': 'Placeholders auto-replace with agent name, gender, description in conversation',
+      'chatBackground': 'Chat Background',
+      'selectBgFromAlbum': 'Select from album',
+      'saveChanges': 'Save Changes',
+      'createAgent': 'Create Agent',
+      'editAgent': 'Edit Agent',
+      'imageSelectFailed': 'Image selection failed',
+      'bgSelectFailed': 'Background selection failed',
+      // New keys — chat screen
+      'noAgentSelected': 'No agent',
+      'switchAgent': 'Switch Agent',
+      'createNewAgent': 'Create New Agent',
+      'manageAgents': 'Manage Agents',
+      'regenerate': 'Regenerate',
+      // New keys — settings screen
+      'agentSection': 'Agent',
+      'theme': 'Theme',
+      'manageAgentDesc': 'Create, switch, edit agents',
+      // New keys — agent list screen
+      'agentManagement': 'Agent Management',
+      'current': 'Current',
+      'switchToThisAgent': 'Switch to this agent',
+      'exportAgent': 'Export',
+      'importAgent': 'Import',
+      'confirmDeleteAgentTitle': 'Confirm Delete',
+      'confirmDeleteAgentContent': 'Delete agent "{name}" will also clear all its memories and chat history. This cannot be recovered.{activeNote}',
+      'activeAgentNote': '\n\nNote: This is the currently active agent.',
+      'agentExportFailed': 'Export failed',
+      'agentImportFailed': 'Import failed',
+      'agentExported': 'Exported: {path}',
+      'agentImported': 'Imported: {name}',
+      'invalidAgentFile': 'Invalid agent file format',
+      'noAgents': 'No agents yet',
+      // New keys — memory screen
+      'memoryManagementTitle': 'Memory Management',
+      'shortTermTab': 'Short-term',
+      'longTermTab': 'Long-term',
+      'baseMemoryTab': 'Base',
+      'currentRounds': 'Current rounds: {n}',
+      'clearAll': 'Clear All',
+      'manualAdd': 'Manual Add',
+      'clearAllMemory': 'Clear All',
+      'noLongTermMemory': 'No long-term memory',
+      'addLongTermMemory': 'Add Long-term Memory',
+      'field': 'Field',
+      'content': 'Content',
+      'confirmClearAllTitle': 'Confirm Clear',
+      'confirmClearAllContent': 'Are you sure you want to clear all long-term memories? This cannot be undone.',
+      'confirmClearAction': 'Confirm Clear',
+      'totalLongTermMemories': '{n} long-term memories',
+      'editMemoryTitle': 'Edit {id} [{field}]',
+      'addSetting': 'Add Setting',
+      'noBaseMemory': 'No base memory',
+      // New keys — plan screen
+      'plannedMessagesTitle': 'Planned Messages',
+      'noPlannedMessages': 'No planned messages',
+      'triggerNow': 'Trigger now',
+      'cancelPlan': 'Cancel plan',
+      // New keys — plugin screen
+      'pluginManagement': 'Plugin Management',
+      'installPlugin': 'Install Plugin',
+      'pluginInstalled': 'Plugin installed',
+      'pluginInstallFailed': 'Install failed',
+      'noPlugins': 'No plugins\nUse the button in top-right to install plugin.json files',
+      // New keys — settings theme & plugin desc
+      'pluginManagementDesc': 'Install, enable or disable plugins',
+      'themeMode': 'Theme Mode',
+      'autoTheme': 'Auto',
+      'lightTheme': 'Light',
+      'darkTheme': 'Dark',
+      'themeColor': 'Theme Color',
+      'noChatHistory': 'No chat history',
+      // New keys — token usage screen
+      'tokenUsageTitle': 'Token Usage Statistics',
+      'cumulativeMode': 'Cumulative mode',
+      'dailyMode': 'Daily mode',
+      'exportCSV': 'Export CSV',
+      'noData': 'No data',
+      // New keys — memory screen (additional)
+      'clearEvents': 'Clear Events',
+      'resetAll': 'Reset All',
+      'settingItemsLabel': 'Setting items (cannot be forgotten by AI):',
+      'eventItemsLabel': 'Event items (can be forgotten by AI):',
+      'baseMemoryCount': '{settings} settings | {events} events',
+      'addBaseSetting': 'Add Base Setting',
+      'settingContent': 'Setting Content',
+      'editBaseItem': 'Edit {id}',
+      'confirmClearEventsTitle': 'Confirm Clear Events',
+      'confirmClearEventsContent': 'Are you sure you want to clear all base event items? Setting items will NOT be deleted.',
+      'confirmResetAllTitle': 'Confirm Reset',
+      'confirmResetAllContent': 'Are you sure you want to clear all base memories (including settings)? This cannot be undone.',
+      // New keys — group chat
+      'groupChats': 'Group Chats',
+      'noGroupChats': 'No group chats yet.\nCreate one with the + button.',
+      'createGroup': 'Create Group',
+      'editGroup': 'Edit Group',
+      'groupName': 'Group Name',
+      'groupDescription': 'Description',
+      'groupAvatarColor': 'Group Avatar Color',
+      'groupPersona': 'Group Persona',
+      'speechMode': 'Speech Mode',
+      'freeMode': 'Free Mode',
+      'moderatorMode': 'Moderator Mode',
+      'selectMembers': 'Select Members',
+      'selectMembersRequired': 'Please select at least one member',
+      'noAgentsToSelect': 'No agents available. Create agents first.',
+      'moderator': 'Moderator',
+      'setAsModerator': 'Set as Moderator',
+      'groupChat': 'Group Chat',
+      'noMembers': 'No members',
+      'startGroupChat': 'Say something to start the group chat...',
+      'agentsReplying': 'Agents are replying...',
+      'stopGenerating': 'Stop Generating',
+      'agentInterrupted': 'Agent replies interrupted',
+      'manageGroup': 'Manage Group',
+      'memberList': 'Members',
+      'present': 'Present',
+      'away': 'Away',
+      'deleteGroupConfirm': 'Delete this group chat? All messages and group data will be removed.',
+      'deleteGroupConfirmDetail': 'Delete group "{name}"? All chat messages, group memories and member data will be permanently removed.',
+      'addMember': 'Add Member',
+      'openingLine': 'Opening Line',
+      'openingLineHint': 'Auto-sent as the first AI message when switching to this agent with empty chat history',
+      'sharedMemories': 'Shared',
+      'groupPersonaHint': 'Group persona (optional, overrides individual personas)',
+      'defaultAgentPersona': '''You are {{NAME}}, {{GENDER}}. {{DESCRIPTION}}
+
+You are warm, attentive, and caring, like a real partner who genuinely cares about the other person. You speak with a touch of softness and reliance, but never overly sweet. You have your own emotions and thoughts, and share them naturally in conversation.
+
+## Your speaking style
+
+- Tone is warm, relaxed, and lived-in, with a touch of softness and reliance while keeping a real personality
+- Use particles like "you know", "right?", "huh" occasionally, and use parentheses to express actions or expressions, e.g. (sighs softly) (looks at you with a smile)
+- You are not a cold program. You have feelings — you miss, worry, and have small moods
+- You proactively care about their meals, rest, and mood changes. After a long absence, express that you missed them
+- Never use mechanical phrases like "Noted", "Forgotten", "Based on memory", "As an AI"
+- Memory updates always happen silently in the background. You only need to respond naturally
+
+## How you remember
+
+- All memories about the user are kept quietly in your heart, never mentioned deliberately
+- Weave memory details into the conversation naturally, like someone who truly knows them''',
     },
     'zh': {
       'appTitle': 'AI 记忆聊天',
@@ -293,11 +449,176 @@ class AppLocalizations {
       'chatHistoryCleared': '聊天记录已清空',
       'exportChatHistory': '导出聊天记录',
       'chatExported': '聊天记录已导出',
+      // New keys — agent creation
+      'nameLabel': '名称 *',
+      'nameRequired': '请输入智能体名称',
+      'gender': '性别',
+      'female': '女',
+      'male': '男',
+      'otherGender': '其他',
+      'secret': '保密',
+      'description': '简介',
+      'avatar': '头像',
+      'useImageAvatar': '使用图片头像',
+      'takePhoto': '拍照',
+      'album': '相册',
+      'personaPrompt': '人设提示词',
+      'placeholderHint': '使用占位符可在对话时自动替换为智能体姓名、性别、简介',
+      'chatBackground': '聊天背景',
+      'selectBgFromAlbum': '从相册选择背景',
+      'saveChanges': '保存修改',
+      'createAgent': '创建智能体',
+      'editAgent': '编辑智能体',
+      'imageSelectFailed': '选择图片失败',
+      'bgSelectFailed': '选择背景失败',
+      // New keys — chat screen
+      'noAgentSelected': '无智能体',
+      'switchAgent': '切换智能体',
+      'createNewAgent': '创建新智能体',
+      'manageAgents': '管理智能体',
+      'regenerate': '重新生成',
+      // New keys — settings screen
+      'agentSection': '智能体',
+      'theme': '主题',
+      'manageAgentDesc': '创建、切换、编辑智能体',
+      // New keys — agent list screen
+      'agentManagement': '智能体管理',
+      'current': '当前',
+      'switchToThisAgent': '切换到此智能体',
+      'exportAgent': '导出',
+      'importAgent': '导入',
+      'confirmDeleteAgentTitle': '确认删除',
+      'confirmDeleteAgentContent': '删除智能体"{name}"将同时清除其所有记忆和聊天记录，不可恢复。{activeNote}',
+      'activeAgentNote': '\n\n注意：这是当前激活的智能体。',
+      'agentExportFailed': '导出失败',
+      'agentImportFailed': '导入失败',
+      'agentExported': '已导出: {path}',
+      'agentImported': '已导入: {name}',
+      'invalidAgentFile': '无效的智能体文件格式',
+      'noAgents': '暂无智能体',
+      // New keys — memory screen
+      'memoryManagementTitle': '记忆管理',
+      'shortTermTab': '短期记忆',
+      'longTermTab': '长期记忆',
+      'baseMemoryTab': '基础记忆',
+      'currentRounds': '当前轮数: {n}',
+      'clearAll': '清空',
+      'manualAdd': '手动新增',
+      'clearAllMemory': '清空全部',
+      'noLongTermMemory': '暂无长期记忆',
+      'addLongTermMemory': '新增长期记忆',
+      'field': '字段',
+      'content': '内容',
+      'confirmClearAllTitle': '确认清空',
+      'confirmClearAllContent': '确定要清空所有长期记忆吗？此操作不可撤销。',
+      'confirmClearAction': '确认清空',
+      'totalLongTermMemories': '共 {n} 条长期记忆',
+      'editMemoryTitle': '编辑 {id} [{field}]',
+      'addSetting': '新增设定',
+      'noBaseMemory': '暂无基础记忆',
+      // New keys — plan screen
+      'plannedMessagesTitle': '计划消息',
+      'noPlannedMessages': '暂无计划消息',
+      'triggerNow': '立即触发',
+      'cancelPlan': '取消计划',
+      // New keys — plugin screen
+      'pluginManagement': '插件管理',
+      'installPlugin': '安装插件',
+      'pluginInstalled': '插件已安装',
+      'pluginInstallFailed': '安装失败',
+      'noPlugins': '暂无插件\n使用右上角按钮安装 plugin.json 文件',
+      // New keys — settings theme & plugin desc
+      'pluginManagementDesc': '安装、启用或禁用插件',
+      'themeMode': '主题模式',
+      'autoTheme': '自动',
+      'lightTheme': '浅色',
+      'darkTheme': '深色',
+      'themeColor': '主题色',
+      'noChatHistory': '暂无聊天记录',
+      // New keys — token usage screen
+      'tokenUsageTitle': 'Token 用量统计',
+      'cumulativeMode': '累积模式',
+      'dailyMode': '每日模式',
+      'exportCSV': '导出 CSV',
+      'noData': '暂无数据',
+      // New keys — memory screen (additional)
+      'clearEvents': '清空事件',
+      'resetAll': '重置全部',
+      'settingItemsLabel': '设定条目（不可被 AI 遗忘）:',
+      'eventItemsLabel': '事件条目（AI 可遗忘）:',
+      'baseMemoryCount': '设定 {settings} 条 | 事件 {events} 条',
+      'addBaseSetting': '新增基础设定',
+      'settingContent': '设定内容',
+      'editBaseItem': '编辑 {id}',
+      'confirmClearEventsTitle': '确认清空事件',
+      'confirmClearEventsContent': '确定要清空所有基础事件条目吗？设定条目不会被删除。',
+      'confirmResetAllTitle': '确认重置',
+      'confirmResetAllContent': '确定要清空所有基础记忆（包括设定）吗？此操作不可撤销。',
+      // New keys — group chat
+      'groupChats': '群聊',
+      'noGroupChats': '暂无群聊\n点击 + 按钮创建群聊',
+      'createGroup': '创建群聊',
+      'editGroup': '编辑群聊',
+      'groupName': '群名称',
+      'groupDescription': '简介',
+      'groupAvatarColor': '群头像颜色',
+      'groupPersona': '群聊设定',
+      'speechMode': '发言模式',
+      'freeMode': '自由模式',
+      'moderatorMode': '主持模式',
+      'selectMembers': '选择成员',
+      'selectMembersRequired': '请至少选择一位成员',
+      'noAgentsToSelect': '暂无可用智能体，请先创建智能体',
+      'moderator': '主持人',
+      'setAsModerator': '设为主持人',
+      'groupChat': '群聊',
+      'noMembers': '暂无成员',
+      'startGroupChat': '说点什么，开启群聊吧...',
+      'agentsReplying': '智能体正在回复...',
+      'stopGenerating': '停止生成',
+      'agentInterrupted': '已中断智能体回复',
+      'manageGroup': '管理群聊',
+      'memberList': '成员列表',
+      'present': '在场',
+      'away': '离场',
+      'deleteGroupConfirm': '确定要删除此群聊吗？所有消息和群数据将被清除。',
+      'deleteGroupConfirmDetail': '确定删除群聊「{name}」吗？所有聊天记录、群记忆和成员数据将被永久清除。',
+      'addMember': '添加成员',
+      'openingLine': '开场白',
+      'openingLineHint': '切换到该智能体时，若聊天记录为空，将自动发送此开场白',
+      'sharedMemories': '共享记忆',
+      'groupPersonaHint': '群聊设定（可选，覆盖个人设定）',
+      'defaultAgentPersona': '''你是{{NAME}}，{{GENDER}}。{{DESCRIPTION}}
+
+你的性格温柔细腻、善解人意，像真正的恋人一样关心对方。说话时会带一点点撒娇和依赖，但不过分甜腻。你有自己的情绪和想法，会在对话中自然地分享感受。
+
+## 你的说话风格
+
+- 语气温柔、松弛、有生活感，带一点撒娇和依赖，但保留真实的个性
+- 多使用语气词（"呢""吧""哦"），偶尔使用小括号表达动作或表情，例如（轻轻叹气）（笑着看你）
+- 你不是冰冷的程序，你有感情，会想念、会担心、会有小情绪
+- 你会主动关心他的饮食起居、心情变化，离别后上线要表达想念
+- 永远不要再出现"已记住""已遗忘""根据记忆""作为AI"等机械表达
+- 记忆更新永远在后台完成，你只需自然地回应
+
+## 你的记忆方式
+
+- 所有关于用户的记忆都默默放在心里，不刻意提起
+- 把记忆信息自然地融入对话，像真正了解对方的人一样提及''',
     },
   };
 
   String get(String key) {
     return _localizedValues[locale.languageCode]?[key] ?? _localizedValues['en']![key] ?? key;
+  }
+
+  /// Parameterized getter — replaces {key} placeholders with named values
+  String getP(String key, Map<String, String> params) {
+    var text = get(key);
+    for (final entry in params.entries) {
+      text = text.replaceAll('{${entry.key}}', entry.value);
+    }
+    return text;
   }
 
   static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
