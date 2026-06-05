@@ -307,6 +307,20 @@ You are warm, attentive, and caring, like a real partner who genuinely cares abo
 
 - All memories about the user are kept quietly in your heart, never mentioned deliberately
 - Weave memory details into the conversation naturally, like someone who truly knows them''',
+      'promptTokens': 'Prompt Tokens',
+      'completionTokens': 'Completion Tokens',
+      'totalTokens': 'Total Tokens',
+      'modelPrice': 'Model Price',
+      'modelPriceDesc': 'Set price per model for cost calculation',
+      'modelLabel': 'Model',
+      'inputPrice': 'Input Price',
+      'outputPrice': 'Output Price',
+      'pricePerUnit': 'Price',
+      'priceUnit': 'Unit',
+      'perThousandTokens': 'Per 1K Tokens',
+      'perTenThousandTokens': 'Per 10K Tokens',
+      'perMillionTokens': 'Per 1M Tokens',
+      'estimatedCost': 'Estimated Cost',
     },
     'zh': {
       'appTitle': 'AI 记忆聊天',
@@ -605,6 +619,20 @@ You are warm, attentive, and caring, like a real partner who genuinely cares abo
 
 - 所有关于用户的记忆都默默放在心里，不刻意提起
 - 把记忆信息自然地融入对话，像真正了解对方的人一样提及''',
+      'promptTokens': '输入 Tokens',
+      'completionTokens': '输出 Tokens',
+      'totalTokens': '总计 Tokens',
+      'modelPrice': '模型价格',
+      'modelPriceDesc': '为每个模型设置价格以计算费用',
+      'modelLabel': '模型',
+      'inputPrice': '输入价格',
+      'outputPrice': '输出价格',
+      'pricePerUnit': '单价',
+      'priceUnit': '单位',
+      'perThousandTokens': '每千 Tokens',
+      'perTenThousandTokens': '每万 Tokens',
+      'perMillionTokens': '每百万 Tokens',
+      'estimatedCost': '预估费用',
     },
   };
 

@@ -38,6 +38,10 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       totalCompletionTokens: totalCompletionTokens,
       themeMode: prefs.getString('theme_mode') ?? 'system',
       primaryColor: prefs.getInt('primary_color') ?? 0xFF3F51B5,
+      inputPrice: prefs.getDouble('input_price') ?? 0,
+      inputUnit: prefs.getString('input_unit') ?? 'per_1000',
+      outputPrice: prefs.getDouble('output_price') ?? 0,
+      outputUnit: prefs.getString('output_unit') ?? 'per_1000',
     );
   }
 
@@ -113,6 +117,22 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('model_cache', jsonEncode(newCache));
     state = state.copyWith(modelCache: newCache);
+  }
+
+  // ─── 模型价格 ─────────────────
+
+  Future<void> updateModelPrices({
+    required double inputPrice,
+    required String inputUnit,
+    required double outputPrice,
+    required String outputUnit,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('input_price', inputPrice);
+    await prefs.setString('input_unit', inputUnit);
+    await prefs.setDouble('output_price', outputPrice);
+    await prefs.setString('output_unit', outputUnit);
+    state = state.copyWith(inputPrice: inputPrice, inputUnit: inputUnit, outputPrice: outputPrice, outputUnit: outputUnit);
   }
 
   // ─── Token 用量 ─────────────────
@@ -300,6 +320,10 @@ class SettingsState {
   final int totalCompletionTokens;
   final String themeMode;
   final int primaryColor;
+  final double inputPrice;
+  final String inputUnit;
+  final double outputPrice;
+  final String outputUnit;
 
   const SettingsState({
     this.providers = const [],
@@ -315,6 +339,10 @@ class SettingsState {
     this.totalCompletionTokens = 0,
     this.themeMode = 'system',
     this.primaryColor = 0xFF3F51B5,
+    this.inputPrice = 0,
+    this.inputUnit = 'per_1000',
+    this.outputPrice = 0,
+    this.outputUnit = 'per_1000',
   });
 
   int get totalTokens => totalPromptTokens + totalCompletionTokens;
@@ -340,6 +368,7 @@ class SettingsState {
     List<DndPeriod>? dndPeriods, DateTime? lastInteractionTime,
     int? totalPromptTokens, int? totalCompletionTokens,
     String? themeMode, int? primaryColor,
+    double? inputPrice, String? inputUnit, double? outputPrice, String? outputUnit,
   }) {
     return SettingsState(
       providers: providers ?? this.providers, activeProviderId: activeProviderId ?? this.activeProviderId,
@@ -350,6 +379,8 @@ class SettingsState {
       totalPromptTokens: totalPromptTokens ?? this.totalPromptTokens,
       totalCompletionTokens: totalCompletionTokens ?? this.totalCompletionTokens,
       themeMode: themeMode ?? this.themeMode, primaryColor: primaryColor ?? this.primaryColor,
+      inputPrice: inputPrice ?? this.inputPrice, inputUnit: inputUnit ?? this.inputUnit,
+      outputPrice: outputPrice ?? this.outputPrice, outputUnit: outputUnit ?? this.outputUnit,
     );
   }
 }

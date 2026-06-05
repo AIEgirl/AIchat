@@ -81,6 +81,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _buildProactiveSection(s),
           _sectionHeader(l10n.get('memoryAndData')),
           _buildMemoryDataSection(s),
+          _sectionHeader(l10n.get('modelPrice')),
+          _buildModelPriceSection(s, provider),
           _sectionHeader(l10n.get('configImportExport')),
           _buildConfigSection(),
           _sectionHeader(l10n.get('language')),
@@ -295,8 +297,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (provider == null) {
       return _sectionCard(children: [
         Padding(padding: const EdgeInsets.all(16), child: Text(l10n.get('configureProviderFirst'), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant))),
-      ]);
-    }
+    ]);
+  }
 
     return _sectionCard(children: [
       Padding(
@@ -454,7 +456,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-            Text(subtitle, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+            Text(subtitle, style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis),
           ])),
           if (trailing != null) trailing else if (onTap != null) Icon(Icons.chevron_right, size: 18, color: scheme.onSurfaceVariant),
         ]),
@@ -542,6 +544,144 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (e) {
       _snack('${l10n.get('exportFailed')}: $e', error: true);
     }
+  }
+
+  // ═══ Model Price ═══
+
+  Widget _buildModelPriceSection(SettingsState s, ProviderConfig? provider) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    final totalPrompt = s.totalPromptTokens;
+    final totalCompletion = s.totalCompletionTokens;
+
+    double cost = 0;
+    if (s.inputPrice > 0) {
+      final inDiv = s.inputUnit == 'per_10000' ? 10000.0 : (s.inputUnit == 'per_1000000' ? 1000000.0 : 1000.0);
+      cost += (totalPrompt / inDiv) * s.inputPrice;
+    }
+    if (s.outputPrice > 0) {
+      final outDiv = s.outputUnit == 'per_10000' ? 10000.0 : (s.outputUnit == 'per_1000000' ? 1000000.0 : 1000.0);
+      cost += (totalCompletion / outDiv) * s.outputPrice;
+    }
+
+    return _sectionCard(children: [
+      Padding(padding: const EdgeInsets.all(12), child: Column(children: [
+        Row(children: [
+          Icon(Icons.attach_money, size: 20, color: scheme.primary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(l10n.get('modelPriceDesc'), style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant))),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Text('${l10n.get('inputPrice')}: ', style: const TextStyle(fontSize: 13)),
+          Text(s.inputPrice > 0 ? '${s.inputPrice} ${_unitLabel(s.inputUnit)}' : '--',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+        ]),
+        Row(children: [
+          Text('${l10n.get('outputPrice')}: ', style: const TextStyle(fontSize: 13)),
+          Text(s.outputPrice > 0 ? '${s.outputPrice} ${_unitLabel(s.outputUnit)}' : '--',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          TextButton(onPressed: _editModelPrices, child: Text(l10n.get('edit'))),
+        ]),
+        const Divider(height: 1),
+        Row(children: [
+          Text('${l10n.get('promptTokens')}: ', style: const TextStyle(fontSize: 13)),
+          Text('$totalPrompt', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 4),
+        Row(children: [
+          Text('${l10n.get('completionTokens')}: ', style: const TextStyle(fontSize: 13)),
+          Text('$totalCompletion', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 4),
+        Row(children: [
+          Text('${l10n.get('estimatedCost')}: ', style: const TextStyle(fontSize: 13)),
+          Text(cost > 0 ? cost.toStringAsFixed(4) : '--', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: scheme.primary)),
+        ]),
+      ])),
+    ]);
+  }
+
+  String _unitLabel(String unit) {
+    final l10n = AppLocalizations.of(context);
+    if (unit == 'per_10000') return l10n.get('perTenThousandTokens');
+    if (unit == 'per_1000000') return l10n.get('perMillionTokens');
+    return l10n.get('perThousandTokens');
+  }
+
+  Future<void> _editModelPrices() async {
+    final l10n = AppLocalizations.of(context);
+    final s = ref.read(settingsProvider);
+    final inCtrl = TextEditingController(text: s.inputPrice > 0 ? s.inputPrice.toString() : '');
+    final outCtrl = TextEditingController(text: s.outputPrice > 0 ? s.outputPrice.toString() : '');
+    String inUnit = s.inputUnit;
+    String outUnit = s.outputUnit;
+    if (!mounted) return;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialogState) => AlertDialog(
+        title: Text(l10n.get('modelPrice')),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(l10n.get('inputPrice'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          const SizedBox(height: 4),
+          Row(children: [
+            Expanded(child: TextField(
+              controller: inCtrl,
+              decoration: InputDecoration(labelText: l10n.get('pricePerUnit'), border: const OutlineInputBorder(), isDense: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            )),
+            const SizedBox(width: 8),
+            Flexible(
+              child: DropdownButtonFormField<String>(
+                value: inUnit,
+                decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                items: [
+                  DropdownMenuItem(value: 'per_1000', child: Text(l10n.get('perThousandTokens'), style: const TextStyle(fontSize: 12))),
+                  DropdownMenuItem(value: 'per_10000', child: Text(l10n.get('perTenThousandTokens'), style: const TextStyle(fontSize: 12))),
+                  DropdownMenuItem(value: 'per_1000000', child: Text(l10n.get('perMillionTokens'), style: const TextStyle(fontSize: 12))),
+                ],
+                onChanged: (v) { if (v != null) setDialogState(() => inUnit = v); },
+              ),
+            ),
+          ]),
+          const SizedBox(height: 16),
+          Text(l10n.get('outputPrice'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          const SizedBox(height: 4),
+          Row(children: [
+            Expanded(child: TextField(
+              controller: outCtrl,
+              decoration: InputDecoration(labelText: l10n.get('pricePerUnit'), border: const OutlineInputBorder(), isDense: true),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            )),
+            const SizedBox(width: 8),
+            Flexible(
+              child: DropdownButtonFormField<String>(
+                value: outUnit,
+                decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                items: [
+                  DropdownMenuItem(value: 'per_1000', child: Text(l10n.get('perThousandTokens'), style: const TextStyle(fontSize: 12))),
+                  DropdownMenuItem(value: 'per_10000', child: Text(l10n.get('perTenThousandTokens'), style: const TextStyle(fontSize: 12))),
+                  DropdownMenuItem(value: 'per_1000000', child: Text(l10n.get('perMillionTokens'), style: const TextStyle(fontSize: 12))),
+                ],
+                onChanged: (v) { if (v != null) setDialogState(() => outUnit = v); },
+              ),
+            ),
+          ]),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l10n.get('cancel'))),
+          FilledButton(onPressed: () {
+            final ip = double.tryParse(inCtrl.text.trim()) ?? 0;
+            final op = double.tryParse(outCtrl.text.trim()) ?? 0;
+            ref.read(settingsProvider.notifier).updateModelPrices(
+              inputPrice: ip, inputUnit: inUnit, outputPrice: op, outputUnit: outUnit,
+            );
+            Navigator.pop(ctx);
+          }, child: Text(l10n.get('save'))),
+        ],
+      )),
+    );
   }
 
   // ═══ 5. Config Import/Export ═══

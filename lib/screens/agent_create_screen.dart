@@ -232,11 +232,10 @@ class _AgentCreateScreenState extends ConsumerState<AgentCreateScreen> {
               isEditing ? l10n.get('editAgent') : l10n.get('createAgent'))),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           TextFormField(
               controller: _nameCtrl,
-              decoration: InputDecoration(
-                  labelText: l10n.get('nameLabel'))),
+              decoration: InputDecoration(labelText: l10n.get('nameLabel'))),
           const SizedBox(height: 16),
           Text(l10n.get('gender'),
               style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),

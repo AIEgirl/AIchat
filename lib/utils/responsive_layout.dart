@@ -20,11 +20,9 @@ class ResponsiveLayout {
   static bool isDesktop(BuildContext context) =>
       MediaQuery.of(context).size.width >= desktopBreakpoint;
 
-  /// Safe bubble max width for any context.
+  /// Safe bubble max width for any context. Always 75% of screen width max.
   static double bubbleMaxWidth(BuildContext context) =>
-      isDesktop(context)
-          ? min(600.0, (MediaQuery.of(context).size.width - sidebarWidth) * 0.65)
-          : MediaQuery.of(context).size.width * 0.7;
+      MediaQuery.of(context).size.width * 0.75;
 
   /// Scaffold builder that swaps between mobile and desktop layouts.
   static Widget scaffold({

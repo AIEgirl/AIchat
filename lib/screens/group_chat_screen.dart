@@ -7,6 +7,7 @@ import '../providers/agent_provider.dart';
 import '../models/group_message.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
+import '../utils/responsive_layout.dart';
 import 'group_manage_screen.dart';
 
 class GroupChatScreen extends ConsumerStatefulWidget {
@@ -147,9 +148,9 @@ class _GroupChatScreenState extends ConsumerState<GroupChatScreen> {
                       ),
               ]),
             ),
-          ]),
+                  ]),
+          ),
         ),
-      ),
     );
   }
 
@@ -375,42 +376,45 @@ class _GroupBubble extends StatelessWidget {
           Flexible(
             child: GestureDetector(
               onTap: onTap,
-              child: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: bubbleColor,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(AppTheme.radiusLg),
-                  topRight: const Radius.circular(AppTheme.radiusLg),
-                  bottomLeft: Radius.circular(isUser ? AppTheme.radiusLg : 4),
-                  bottomRight: Radius.circular(isUser ? 4 : AppTheme.radiusLg),
-                ),
-                border: Border.all(color: borderColor),
-                boxShadow: AppTheme.shadowSm,
-              ),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (!isUser)
-                      Text(agentName,
-                          style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: scheme.onSurfaceVariant)),
-                    if (!isUser) const SizedBox(height: 2),
-                    Text(message.content,
-                        style: TextStyle(fontSize: 14, color: onBubbleColor, height: 1.4)),
-                    const SizedBox(height: 2),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(timeStr,
-                          style: TextStyle(
-                              fontSize: 10,
-                              color: onBubbleColor.withValues(alpha: 0.6))),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: ResponsiveLayout.bubbleMaxWidth(context)),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: bubbleColor,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(AppTheme.radiusLg),
+                      topRight: const Radius.circular(AppTheme.radiusLg),
+                      bottomLeft: Radius.circular(isUser ? AppTheme.radiusLg : 4),
+                      bottomRight: Radius.circular(isUser ? 4 : AppTheme.radiusLg),
                     ),
-                  ]),
+                    border: Border.all(color: borderColor),
+                    boxShadow: AppTheme.shadowSm,
+                  ),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (!isUser)
+                          Text(agentName,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: scheme.onSurfaceVariant)),
+                        if (!isUser) const SizedBox(height: 2),
+                        Text(message.content,
+                            style: TextStyle(fontSize: 14, color: onBubbleColor, height: 1.4)),
+                        const SizedBox(height: 2),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(timeStr,
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: onBubbleColor.withValues(alpha: 0.6))),
+                        ),
+                      ]),
+                ),
+              ),
             ),
-          ),
           ),
           if (isUser) const SizedBox(width: 8),
           if (isUser)

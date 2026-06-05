@@ -15,6 +15,7 @@ class MemoryService {
   void setAgentId(String? id) {
     if (_agentId != id) {
       _agentId = id;
+      _groupId = null;  // Switching agents resets to private chat scope
       _shortTermMessages.clear();
       _shortTermSeq = 0;
     }
@@ -83,7 +84,7 @@ class MemoryService {
   // ─── 长期记忆 ────
 
   Future<String> createLongTermMemory({required String field, required String content}) async {
-    final maxNum = await DatabaseService.getMaxLongTermIdNumber(agentId: _agentId);
+    final maxNum = await DatabaseService.getMaxLongTermIdNumber(agentId: _agentId, groupId: _groupId);
     final newId = 'L${(maxNum + 1).toString().padLeft(3, '0')}';
     final memory = LongTermMemory(id: newId, field: field, content: content, agentId: _agentId, groupId: _groupId);
     await DatabaseService.insertLongTermMemory(memory);
@@ -118,7 +119,7 @@ class MemoryService {
   // ─── 基础记忆 ────
 
   Future<String> createBaseMemory({required String type, required String content}) async {
-    final maxNum = await DatabaseService.getMaxBaseIdNumber(agentId: _agentId);
+    final maxNum = await DatabaseService.getMaxBaseIdNumber(agentId: _agentId, groupId: _groupId);
     final newId = 'B${(maxNum + 1).toString().padLeft(3, '0')}';
     final memory = BaseMemory(id: newId, type: type, content: content, agentId: _agentId, groupId: _groupId);
     await DatabaseService.insertBaseMemory(memory);

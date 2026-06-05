@@ -25,6 +25,8 @@ class ChatMessage {
   final bool isProactive;
   final String? shortMemId;
   final String? imagePath;
+  final int? promptTokens;
+  final int? completionTokens;
 
   ChatMessage({
     this.dbId,
@@ -35,6 +37,8 @@ class ChatMessage {
     this.isProactive = false,
     this.shortMemId,
     this.imagePath,
+    this.promptTokens,
+    this.completionTokens,
   }) : timestamp = timestamp ?? DateTime.now();
 
   bool get isUser => role == 'user';
@@ -113,6 +117,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   Future<void> _init() async {
     final settings = _ref.read(settingsProvider);
+    _memoryService.maxShortTermRounds = settings.maxShortTermRounds;
     await _memoryService.loadShortTermFromDb(settings.maxShortTermRounds);
     await _loadChatMessagesFromDb();
     _startProactiveCheck();
@@ -304,12 +309,26 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final rsp = responseBody != null
         ? 'finish:${ApiService.parseFinishReason(responseBody) ?? "?"} tc:$tcCount'
         : 'no_rsp';
+    final tokens = _extractTokenUsage(responseBody);
     DatabaseService.insertDebugLog(
       requestSummary: summary, responseSummary: rsp, error: error, durationMs: elapsedMs,
       agentId: _agentId,
+      promptTokens: tokens['prompt_tokens'], completionTokens: tokens['completion_tokens'],
     );
 
     _recordTokenUsage(responseBody);
+  }
+
+  Map<String, int> _extractTokenUsage(Map<String, dynamic>? responseBody) {
+    if (responseBody == null) return {};
+    final usage = responseBody['usage'] as Map<String, dynamic>?;
+    if (usage == null) return {};
+    final prompt = usage['prompt_tokens'] as int?;
+    final completion = usage['completion_tokens'] as int?;
+    final map = <String, int>{};
+    if (prompt != null) map['prompt_tokens'] = prompt;
+    if (completion != null) map['completion_tokens'] = completion;
+    return map;
   }
 
   void _recordTokenUsage(Map<String, dynamic>? responseBody) {
@@ -320,7 +339,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
     final completion = usage['completion_tokens'] as int?;
     if (prompt == null || completion == null) return;
     final model = responseBody['model'] as String?;
-    DatabaseService.insertTokenUsage(promptTokens: prompt, completionTokens: completion, model: model);
+    DatabaseService.insertTokenUsage(promptTokens: prompt, completionTokens: completion, model: model, agentId: _agentId);
+    _ref.read(settingsProvider.notifier).addTokenUsage(prompt, completion);
   }
 
   Future<void> _syncMemoryProviders() async {
@@ -428,7 +448,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
           await _syncMemoryProviders();
           _log('★★★ FINAL: chat tool detected → delivering reply (${chatContent.length} chars)');
           _recordDebugLog(apiMessages: apiMessages, responseBody: lastResponse, startTime: startTime, toolSummary: 'chat_ok');
-          return _ToolLoopResult(chatMessage: chatContent, toolLogs: allToolLogs);
+          final tokens = _extractTokenUsage(lastResponse);
+          return _ToolLoopResult(chatMessage: chatContent, toolLogs: allToolLogs, promptTokens: tokens['prompt_tokens'], completionTokens: tokens['completion_tokens']);
         }
 
         _log('  ↻ No chat yet, calling API again (tool_choice=auto)...');
@@ -455,20 +476,23 @@ class ChatNotifier extends StateNotifier<ChatState> {
         final textContent = ApiService.parseContent(response) ?? '';
         _log('>>> FALLBACK: raw text (${textContent.length} chars)');
         _recordDebugLog(apiMessages: apiMessages, responseBody: lastResponse, startTime: startTime, toolSummary: 'text_fallback');
-        return _ToolLoopResult(chatMessage: textContent.isNotEmpty ? textContent : null, toolLogs: allToolLogs);
+        final tokens1 = _extractTokenUsage(lastResponse);
+        return _ToolLoopResult(chatMessage: textContent.isNotEmpty ? textContent : null, toolLogs: allToolLogs, promptTokens: tokens1['prompt_tokens'], completionTokens: tokens1['completion_tokens']);
       } else {
         // 正常非 tool_calls 退出（已在 tool 执行后）
         final textContent = ApiService.parseContent(response) ?? '';
         _log('>>> FINAL: text (${textContent.length} chars)');
         _recordDebugLog(apiMessages: apiMessages, responseBody: lastResponse, startTime: startTime, toolSummary: hasToolCalls ? 'tools_ok' : 'text_fallback');
-        return _ToolLoopResult(chatMessage: textContent.isNotEmpty ? textContent : null, toolLogs: allToolLogs);
+        final tokens2 = _extractTokenUsage(lastResponse);
+        return _ToolLoopResult(chatMessage: textContent.isNotEmpty ? textContent : null, toolLogs: allToolLogs, promptTokens: tokens2['prompt_tokens'], completionTokens: tokens2['completion_tokens']);
       }
     }
 
     _log('★★★ FINAL: max rounds exceeded');
     _recordDebugLog(apiMessages: apiMessages, responseBody: lastResponse, startTime: startTime,
         error: 'max_rounds', toolSummary: 'max_rounds');
-    return _ToolLoopResult(toolLogs: allToolLogs);
+    final tokens3 = _extractTokenUsage(lastResponse);
+    return _ToolLoopResult(toolLogs: allToolLogs, promptTokens: tokens3['prompt_tokens'], completionTokens: tokens3['completion_tokens']);
   }
 
   int _min(int a, int b) => a < b ? a : b;
@@ -580,6 +604,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
         final aiMsg = ChatMessage(
           role: 'assistant', content: displayContent,
           toolLogs: result.toolLogs.isNotEmpty ? result.toolLogs : null, shortMemId: shortAi.id,
+          promptTokens: result.promptTokens, completionTokens: result.completionTokens,
         );
         _ref.read(settingsProvider.notifier).updateLastInteractionTime(DateTime.now());
         state = state.copyWith(messages: [...state.messages, aiMsg], isLoading: false, debugMessages: debugMsgs);
@@ -620,7 +645,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
           if (result2.chatMessage != null && result2.chatMessage!.isNotEmpty) {
             final shortAi = _memoryService.addShortTermMessage(role: 'assistant', content: result2.chatMessage!);
-            final aiMsg = ChatMessage(role: 'assistant', content: result2.chatMessage!, toolLogs: result2.toolLogs.isNotEmpty ? result2.toolLogs : null, shortMemId: shortAi.id);
+            final aiMsg = ChatMessage(role: 'assistant', content: result2.chatMessage!, toolLogs: result2.toolLogs.isNotEmpty ? result2.toolLogs : null, shortMemId: shortAi.id, promptTokens: result2.promptTokens, completionTokens: result2.completionTokens);
             _ref.read(settingsProvider.notifier).updateLastInteractionTime(DateTime.now());
             state = state.copyWith(messages: [...state.messages, aiMsg], isLoading: false);
             _saveChatMessageToDb(aiMsg);
@@ -850,7 +875,9 @@ $basePrompt''';
 class _ToolLoopResult {
   final String? chatMessage;
   final List<ToolExecutionLog> toolLogs;
-  _ToolLoopResult({this.chatMessage, this.toolLogs = const []});
+  final int? promptTokens;
+  final int? completionTokens;
+  _ToolLoopResult({this.chatMessage, this.toolLogs = const [], this.promptTokens, this.completionTokens});
 }
 
 final notificationServiceProvider = Provider<NotificationService>((ref) => NotificationService());

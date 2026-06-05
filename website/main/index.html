@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4a6fa5" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
+    <meta name="description" content="AI 记忆聊天 — 会记忆的智能聊天伙伴。">
+    <link rel="preconnect" href="https://github.com" crossorigin>
+    <link rel="dns-prefetch" href="https://github.com">
+    <link rel="stylesheet" href="style.css">
+    <title>AI 记忆聊天 — 会记忆的智能聊天伙伴</title>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="#" class="logo">
+                <span class="icon-dot">🧠</span>
+                AI 记忆聊天
+            </a>
+            <ul class="nav-links">
+                <li><a href="#features">亮点</a></li>
+                <li><a href="#memory">记忆</a></li>
+                <li><a href="#group">群聊</a></li>
+                <li><a href="#smart">主动关心</a></li>
+                <li><a href="#privacy">隐私</a></li>
+                <li><a href="#get-started" class="nav-cta">开始使用</a></li>
+                <li>
+                    <a href="https://github.com/AIEgirl/AIchat" target="_blank" rel="noopener noreferrer" class="github-link" aria-label="GitHub 仓库">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.605-.015 2.905-.015 3.3 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/>
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <button class="theme-toggle" id="themeToggle" aria-label="切换主题">🌓</button>
+
+    <section class="hero">
+        <div class="hero-content">
+            <span class="badge">✨ v2.0 · 会记忆的聊天伙伴</span>
+            <h1>AI 记忆聊天</h1>
+            <p class="subtitle">
+                它不是一个转身就忘的聊天机器人，而是一个<strong>真正记住你、关心你、理解你</strong>的智能伴侣。<br>
+                从日常倾诉到角色扮演，再到与多个AI朋友群聊，给你温暖而真实的陪伴。
+            </p>
+            <div class="btn-group">
+                <a href="#features" class="btn btn-primary">🌟 探索特色</a>
+                <a href="#smart" class="btn btn-outline">💡 智能互动</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="features">
+        <span class="section-label">为何与众不同</span>
+        <h2>不只是聊天，是“记得住”的陪伴</h2>
+        <p class="section-desc">大多数聊天AI转身即忘。而在这里，每一次对话都会沉淀为记忆，让关系随时间生长。</p>
+        <div class="features-grid">
+            <div class="feature-card"><div class="icon">🧠</div><h3>三层记忆</h3><p>短期上下文、长期个人信息、基础人设层层递进，让AI真的懂你。</p></div>
+            <div class="feature-card"><div class="icon">👥</div><h3>AI小圈子</h3><p>把多个不同性格的智能体拉进群聊，自由发言或轮流发言，碰撞有趣对话。</p></div>
+            <div class="feature-card"><div class="icon">💬</div><h3>个性开场白</h3><p>给每个智能体设置开场白，新会话一开始就感受他们独特的性格魅力。</p></div>
+            <div class="feature-card"><div class="icon">🔔</div><h3>主动关心</h3><p>很久没说话？他们会主动问候你。还可以定时提醒重要事项，就像私人秘书。</p></div>
+            <div class="feature-card"><div class="icon">🎨</div><h3>完全可定制</h3><p>头像、背景、主题颜色、人设文本……打造完全属于你的聊天空间。</p></div>
+            <div class="feature-card"><div class="icon">🔐</div><h3>安全加密</h3><p>API Key 采用银行级AES加密存储在本地，导出时自动隐藏敏感信息。</p></div>
+            <div class="feature-card"><div class="icon">🌐</div><h3>多供应商</h3><p>支持 DeepSeek、OpenAI、Kimi、通义千问、智谱GLM 等，随时切换。</p></div>
+            <div class="feature-card"><div class="icon">📦</div><h3>数据随身</h3><p>智能体配置可导出为文件，换手机也能无缝恢复整个聊天世界。</p></div>
+        </div>
+    </section>
+
+    <section class="section" id="memory">
+        <span class="section-label">它的记性有多好？</span>
+        <h2>像朋友一样记住关于你的事</h2>
+        <p class="section-desc">普通聊天AI只有7秒记忆。而它拥有三层记忆结构，让每一次交流都变成关系的积累。</p>
+        <div class="memory-tiers">
+            <div class="memory-card">
+                <span class="tier-badge">📝 短期记忆</span>
+                <h3>流畅对话不掉线</h3>
+                <p class="specs">记住最近20轮对话内容，无论聊得多深入，都不会突然“失忆”，上下文衔接自然。</p>
+            </div>
+            <div class="memory-card">
+                <span class="tier-badge">💾 长期记忆</span>
+                <h3>真正了解你的生活</h3>
+                <p class="specs">你说过朋友的名字、喜欢的地点、最近的目标……都会被精细分类记录。下次聊天时，它会不经意提到这些细节。</p>
+            </div>
+            <div class="memory-card">
+                <span class="tier-badge">📜 基础记忆</span>
+                <h3>永不丢失的“灵魂设定”</h3>
+                <p class="specs">你给智能体设定的人设、性格、背景故事会被永久保存，它永远是你创造的那个角色。</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="group">
+        <span class="section-label">不止一对一</span>
+        <h2>把多个AI朋友聚在一起</h2>
+        <p class="section-desc">创建群聊，添加你喜欢的智能体，设定发言规则。看他们在同一个话题下各抒己见，就像经营一个属于自己的小剧团。</p>
+        <div class="features-grid">
+            <div class="feature-card"><div class="icon">🏠</div><h3>轻松管理成员</h3><p>自由设定群主、管理员和普通成员，还可以随时让某个角色“暂离”或“回归”。</p></div>
+            <div class="feature-card"><div class="icon">🔄</div><h3>自由/轮流发言</h3><p>想热闹选自由模式，所有人一起回应；想有秩序选轮流模式，按顺序娓娓道来。</p></div>
+            <div class="feature-card"><div class="icon">📋</div><h3>群聊共同记忆</h3><p>群里提到的信息可以成为共享知识，让群聊更有凝聚力。</p></div>
+            <div class="feature-card"><div class="icon">💬</div><h3>丰富气泡界面</h3><p>不同角色发言清晰区分，@提及、记忆面板等功能，体验不输主流社交软件。</p></div>
+        </div>
+    </section>
+
+    <section class="section" id="smart">
+        <span class="section-label">它会主动找你</span>
+        <h2>不只是回应，更是陪伴</h2>
+        <p class="section-desc">当你沉默太久，它会察觉并送来问候。你也可以让它帮你安排未来的消息，就像一个小小的私人秘书。</p>
+        <div class="features-grid">
+            <div class="feature-card"><div class="icon">⏰</div><h3>计划消息</h3><p>“30分钟后提醒我喝水”或“明早8点叫我”，它会准时发送消息并触发通知。</p></div>
+            <div class="feature-card"><div class="icon">❤️</div><h3>沉默超时关心</h3><p>可设置时长（如12小时），一旦超过没有对话，AI会主动发来温暖的问候。</p></div>
+            <div class="feature-card"><div class="icon">📊</div><h3>用量透明</h3><p>清晰的图表展示API Token消耗，再也不用担心不知不觉超量。</p></div>
+            <div class="feature-card"><div class="icon">🌙</div><h3>勿扰时段</h3><p>设定夜间勿扰，计划消息和主动关心会在那段时间保持安静，不打扰休息。</p></div>
+        </div>
+    </section>
+
+    <section class="section" id="privacy">
+        <span class="section-label">你的数据你做主</span>
+        <h2>安全、灵活、不受限</h2>
+        <p class="section-desc">选择你信任的语言模型供应商，密钥加密存储，配置文件导出时自动脱敏，把你的隐私放在第一位。</p>
+        <div class="provider-grid">
+            <div class="provider-card"><div class="prov-name">🔷 DeepSeek</div><div class="prov-model">深度求索模型</div></div>
+            <div class="provider-card"><div class="prov-name">🌙 Kimi</div><div class="prov-model">月之暗面模型</div></div>
+            <div class="provider-card"><div class="prov-name">☁️ 通义千问</div><div class="prov-model">阿里云模型</div></div>
+            <div class="provider-card"><div class="prov-name">🧩 智谱 GLM</div><div class="prov-model">智谱AI模型</div></div>
+            <div class="provider-card"><div class="prov-name">⚡ OpenAI</div><div class="prov-model">GPT系列模型</div></div>
+        </div>
+        <p style="text-align:center; margin-top:32px; color:var(--text2);">同时支持手动添加任何兼容OpenAI接口的服务商，自由搭配你的AI引擎。</p>
+    </section>
+
+    <section class="section" id="get-started" style="text-align:center;">
+        <h2>准备好遇见你的AI伙伴了吗？</h2>
+        <p style="color:var(--text2);margin-bottom:28px;">支持 Android 与 iOS，选择一个供应商，马上开始你们的第一次对话。</p>
+        <a href="#" class="btn btn-primary" style="font-size:1rem;padding:14px 34px;">🚀 下载 AI 记忆聊天</a>
+    </section>
+
+    <footer class="footer">
+        <div class="tech-stack">
+            <span>跨平台 Flutter</span>
+            <span>本地加密存储</span>
+            <span>Material 3 设计</span>
+            <span>多语言支持</span>
+        </div>
+        <p>AI 记忆聊天 v2.0 · 持续更新中 · 给注重情感连接的对话体验</p>
+        <div class="disclaimer">
+            ⚠️ 本软件由AI辅助编程生成，如果您对AI参与开发感到不适，请酌情使用。
+        </div>
+    </footer>
+
+    <script src="script.js" defer></script>
+</body>
+</html>

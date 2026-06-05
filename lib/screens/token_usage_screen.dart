@@ -83,13 +83,58 @@ class _TokenUsageScreenState extends State<TokenUsageScreen> {
     if (days.isEmpty) {
       return const Center(child: Text('—'));
     }
-    final spots = <FlSpot>[];
-    int maxY = 0;
-    for (int i = 0; i < days.length; i++) {
-      spots.add(FlSpot(i.toDouble(), days[i].total.toDouble()));
-      if (days[i].total > maxY) maxY = days[i].total;
-    }
     final scheme = Theme.of(context).colorScheme;
+    if (!_cumulative) {
+      return _buildBarChart(days, scheme);
+    } else {
+      return _buildLineChart(days, scheme);
+    }
+  }
+
+  Widget _buildBarChart(List<_DayTotal> days, ColorScheme scheme) {
+    final maxY = days.fold<int>(0, (m, d) => d.total > m ? d.total : m);
+    if (maxY == 0) return const Center(child: Text('—'));
+    return BarChart(
+      BarChartData(
+        gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (_) => FlLine(
+                color: scheme.outlineVariant.withValues(alpha: 0.5),
+                strokeWidth: 1)),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 48,
+                  getTitlesWidget: (v, _) =>
+                      Text('${v.toInt()}', style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant)))),
+          bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (v, _) {
+                    final i = v.toInt();
+                    if (i < 0 || i >= days.length) return const SizedBox.shrink();
+                    return Text(days[i].date, style: TextStyle(fontSize: 9, color: scheme.onSurfaceVariant));
+                  })),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        barGroups: List.generate(days.length, (i) => BarChartGroupData(x: i, barRods: [
+          BarChartRodData(toY: days[i].total.toDouble(), color: scheme.primary, width: (MediaQuery.of(context).size.width / days.length).clamp(4.0, 20.0), borderRadius: const BorderRadius.vertical(top: Radius.circular(4))),
+        ])),
+      ),
+    );
+  }
+
+  Widget _buildLineChart(List<_DayTotal> days, ColorScheme scheme) {
+    final spots = <FlSpot>[];
+    int cumSum = 0;
+    for (int i = 0; i < days.length; i++) {
+      cumSum += days[i].total;
+      spots.add(FlSpot(i.toDouble(), cumSum.toDouble()));
+    }
     return LineChart(
       LineChartData(
         gridData: FlGridData(

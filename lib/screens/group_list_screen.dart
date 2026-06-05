@@ -5,6 +5,7 @@ import '../models/group_chat.dart';
 import '../l10n/app_localizations.dart';
 import 'group_create_screen.dart';
 import 'group_chat_screen.dart';
+import 'group_manage_screen.dart';
 
 class GroupListScreen extends ConsumerStatefulWidget {
   const GroupListScreen({super.key});
@@ -86,6 +87,7 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => _enterGroup(context, group),
+        onLongPress: () => _showGroupMenu(context, group, l10n, scheme),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(children: [
@@ -114,11 +116,6 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
                 ),
               ]),
             ),
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: scheme.error),
-              tooltip: l10n.get('delete'),
-              onPressed: () => _confirmDelete(context, group),
-            ),
             Icon(Icons.chevron_right, color: scheme.onSurfaceVariant.withValues(alpha: 0.5)),
           ]),
         ),
@@ -128,5 +125,41 @@ class _GroupListScreenState extends ConsumerState<GroupListScreen> {
 
   void _enterGroup(BuildContext context, GroupChat group) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: group.id)));
+  }
+
+  void _showGroupMenu(BuildContext context, GroupChat group, AppLocalizations l10n, ColorScheme scheme) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: Text(l10n.get('editGroup')),
+            onTap: () {
+              Navigator.pop(ctx);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => GroupManageScreen(groupId: group.id))).then((_) => _refreshGroups());
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.chat_bubble_outline, color: scheme.primary),
+            title: Text(l10n.get('enterGroupChat')),
+            onTap: () {
+              Navigator.pop(ctx);
+              _enterGroup(context, group);
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.delete, color: scheme.error),
+            title: Text(l10n.get('delete'), style: TextStyle(color: scheme.error)),
+            onTap: () {
+              Navigator.pop(ctx);
+              _confirmDelete(context, group);
+            },
+          ),
+        ]),
+      ),
+    );
   }
 }

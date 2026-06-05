@@ -74,39 +74,6 @@ class AgentListScreen extends ConsumerWidget {
                             : agent.gender,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
-                    trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (!isActive)
-                            IconButton(
-                                icon: const Icon(Icons.check_circle_outline,
-                                    color: Colors.green),
-                                tooltip: l10n.get('switchToThisAgent'),
-                                onPressed: () {
-                                  ref
-                                      .read(agentProvider.notifier)
-                                      .setActiveAgent(agent.id);
-                                  Navigator.pop(context);
-                                }),
-                          IconButton(
-                              icon: const Icon(Icons.edit, size: 20),
-                              onPressed: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => AgentCreateScreen(
-                                          agent: agent)))),
-                          IconButton(
-                              icon:
-                                  const Icon(Icons.file_upload, size: 20),
-                              tooltip: l10n.get('exportAgent'),
-                              onPressed: () =>
-                                  _exportAgent(context, ref, agent)),
-                          IconButton(
-                              icon: const Icon(Icons.delete,
-                                  size: 20, color: Colors.red),
-                              onPressed: () =>
-                                  _confirmDelete(context, ref, agent)),
-                        ]),
                     onTap: () {
                       if (!isActive) {
                         ref
@@ -115,6 +82,7 @@ class AgentListScreen extends ConsumerWidget {
                       }
                       Navigator.pop(context);
                     },
+                    onLongPress: () => _showAgentMenu(context, ref, agent, isActive),
                   ),
                 );
               },
@@ -123,6 +91,52 @@ class AgentListScreen extends ConsumerWidget {
         onPressed: () => Navigator.push(context,
             MaterialPageRoute(builder: (_) => const AgentCreateScreen())),
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  void _showAgentMenu(BuildContext context, WidgetRef ref, dynamic agent, bool isActive) {
+    final l10n = AppLocalizations.of(context);
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (!isActive)
+            ListTile(
+              leading: const Icon(Icons.check_circle_outline, color: Colors.green),
+              title: Text(l10n.get('switchToThisAgent')),
+              onTap: () {
+                ref.read(agentProvider.notifier).setActiveAgent(agent.id);
+                Navigator.pop(ctx); Navigator.pop(context);
+              },
+            ),
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: Text(l10n.get('edit')),
+            onTap: () {
+              Navigator.pop(ctx);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => AgentCreateScreen(agent: agent)));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.file_upload),
+            title: Text(l10n.get('export')),
+            onTap: () {
+              Navigator.pop(ctx);
+              _exportAgent(context, ref, agent);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete, color: Colors.red),
+            title: Text(l10n.get('delete'), style: const TextStyle(color: Colors.red)),
+            onTap: () {
+              Navigator.pop(ctx);
+              _confirmDelete(context, ref, agent);
+            },
+          ),
+        ]),
       ),
     );
   }

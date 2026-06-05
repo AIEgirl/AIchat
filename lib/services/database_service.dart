@@ -25,7 +25,7 @@ class DatabaseService {
   static Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'aichat.db');
-    final db = await openDatabase(path, version: 9, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    final db = await openDatabase(path, version: 11, onCreate: _onCreate, onUpgrade: _onUpgrade);
     await _ensureGroupTablesExist(db);
     return db;
   }
@@ -45,6 +45,7 @@ class DatabaseService {
     await db.execute('''CREATE TABLE group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL, sender_type TEXT NOT NULL, sender_id TEXT, sender_name TEXT, content TEXT NOT NULL, timestamp INTEGER, tool_call_data TEXT, FOREIGN KEY (group_id) REFERENCES group_chats(id) ON DELETE CASCADE)''');
     await db.execute('''CREATE TABLE group_short_term (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL, role TEXT NOT NULL, sender_name TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY (group_id) REFERENCES group_chats(id) ON DELETE CASCADE)''');
     await db.execute('''CREATE TABLE group_shared_memories (id TEXT PRIMARY KEY, group_id TEXT NOT NULL, field TEXT NOT NULL, content TEXT NOT NULL, updated_at INTEGER, FOREIGN KEY (group_id) REFERENCES group_chats(id) ON DELETE CASCADE)''');
+    await db.execute('''CREATE TABLE token_cost (id INTEGER PRIMARY KEY AUTOINCREMENT, model TEXT NOT NULL, price REAL NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'per_1000', agent_id TEXT, created_at INTEGER NOT NULL)''');
   }
 
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -88,6 +89,15 @@ class DatabaseService {
     if (oldVersion < 9) {
       try { await db.execute("ALTER TABLE agents ADD COLUMN opening_line TEXT"); } catch (_) {}
       debugPrint('[DB] v9 migration: added opening_line column');
+    }
+    if (oldVersion < 10) {
+      await db.execute('''CREATE TABLE IF NOT EXISTS token_cost (id INTEGER PRIMARY KEY AUTOINCREMENT, model TEXT NOT NULL, price REAL NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'per_1000', agent_id TEXT, created_at INTEGER NOT NULL)''');
+      debugPrint('[DB] v10 migration: added token_cost table');
+    }
+    if (oldVersion < 11) {
+      try { await db.execute("ALTER TABLE debug_logs ADD COLUMN prompt_tokens INTEGER"); } catch (_) {}
+      try { await db.execute("ALTER TABLE debug_logs ADD COLUMN completion_tokens INTEGER"); } catch (_) {}
+      debugPrint('[DB] v11 migration: added token columns to debug_logs');
     }
   }
 
@@ -187,9 +197,13 @@ class DatabaseService {
 
   // ─── 长期记忆 ──────────────────────
 
-  static Future<List<LongTermMemory>> getLongTermMemories({String? agentId}) async {
+  static Future<List<LongTermMemory>> getLongTermMemories({String? agentId, String? groupId, bool privateOnly = true}) async {
     final db = await database;
     if (agentId != null) {
+      if (privateOnly) {
+        final maps = await db.query('long_term_memories', where: 'agent_id = ? AND group_id IS NULL', whereArgs: [agentId], orderBy: 'id ASC');
+        return maps.map(LongTermMemory.fromMap).toList();
+      }
       final maps = await db.query('long_term_memories', where: 'agent_id = ?', whereArgs: [agentId], orderBy: 'id ASC');
       return maps.map(LongTermMemory.fromMap).toList();
     }
@@ -223,9 +237,13 @@ class DatabaseService {
 
   // ─── 基础记忆 ──────────────────────
 
-  static Future<List<BaseMemory>> getBaseMemories({String? agentId}) async {
+  static Future<List<BaseMemory>> getBaseMemories({String? agentId, String? groupId, bool privateOnly = true}) async {
     final db = await database;
     if (agentId != null) {
+      if (privateOnly) {
+        final maps = await db.query('base_memories', where: 'agent_id = ? AND group_id IS NULL', whereArgs: [agentId], orderBy: 'id ASC');
+        return maps.map(BaseMemory.fromMap).toList();
+      }
       final maps = await db.query('base_memories', where: 'agent_id = ?', whereArgs: [agentId], orderBy: 'id ASC');
       return maps.map(BaseMemory.fromMap).toList();
     }
@@ -339,9 +357,9 @@ class DatabaseService {
 
   // ─── 调试日志 ──────────────────────
 
-  static Future<int> insertDebugLog({required String requestSummary, required String responseSummary, String? error, int? durationMs, String? agentId}) async {
+  static Future<int> insertDebugLog({required String requestSummary, required String responseSummary, String? error, int? durationMs, String? agentId, int? promptTokens, int? completionTokens}) async {
     final db = await database;
-    final id = await db.insert('debug_logs', {'timestamp': DateTime.now().millisecondsSinceEpoch, 'request_summary': requestSummary, 'response_summary': responseSummary, 'error': error, 'duration_ms': durationMs, 'agent_id': agentId});
+    final id = await db.insert('debug_logs', {'timestamp': DateTime.now().millisecondsSinceEpoch, 'request_summary': requestSummary, 'response_summary': responseSummary, 'error': error, 'duration_ms': durationMs, 'agent_id': agentId, 'prompt_tokens': promptTokens, 'completion_tokens': completionTokens});
     await _trimDebugLogs(db);
     return id;
   }
@@ -402,24 +420,61 @@ class DatabaseService {
 
   // ─── ID 序号 ────────────────
 
-  static Future<int> getMaxLongTermIdNumber({String? agentId}) async {
+  static Future<int> getMaxLongTermIdNumber({String? agentId, String? groupId}) async {
     final db = await database;
     if (agentId != null) {
-      final result = await db.rawQuery("SELECT MAX(CAST(SUBSTR(id, 2) AS INTEGER)) as max_id FROM long_term_memories WHERE agent_id = ?", [agentId]);
+      if (groupId != null) {
+        final result = await db.rawQuery("SELECT MAX(CAST(SUBSTR(id, 2) AS INTEGER)) as max_id FROM long_term_memories WHERE agent_id = ? AND group_id = ?", [agentId, groupId]);
+        return result.first['max_id'] as int? ?? 0;
+      }
+      final result = await db.rawQuery("SELECT MAX(CAST(SUBSTR(id, 2) AS INTEGER)) as max_id FROM long_term_memories WHERE agent_id = ? AND group_id IS NULL", [agentId]);
       return result.first['max_id'] as int? ?? 0;
     }
     final result = await db.rawQuery("SELECT MAX(CAST(SUBSTR(id, 2) AS INTEGER)) as max_id FROM long_term_memories");
     return result.first['max_id'] as int? ?? 0;
   }
 
-  static Future<int> getMaxBaseIdNumber({String? agentId}) async {
+  static Future<int> getMaxBaseIdNumber({String? agentId, String? groupId}) async {
     final db = await database;
     if (agentId != null) {
-      final result = await db.rawQuery("SELECT MAX(CAST(SUBSTR(id, 2) AS INTEGER)) as max_id FROM base_memories WHERE agent_id = ?", [agentId]);
+      if (groupId != null) {
+        final result = await db.rawQuery("SELECT MAX(CAST(SUBSTR(id, 2) AS INTEGER)) as max_id FROM base_memories WHERE agent_id = ? AND group_id = ?", [agentId, groupId]);
+        return result.first['max_id'] as int? ?? 0;
+      }
+      final result = await db.rawQuery("SELECT MAX(CAST(SUBSTR(id, 2) AS INTEGER)) as max_id FROM base_memories WHERE agent_id = ? AND group_id IS NULL", [agentId]);
       return result.first['max_id'] as int? ?? 0;
     }
     final result = await db.rawQuery("SELECT MAX(CAST(SUBSTR(id, 2) AS INTEGER)) as max_id FROM base_memories");
     return result.first['max_id'] as int? ?? 0;
+  }
+
+  // ─── Token Cost ────────────────
+
+  static Future<void> upsertTokenCost({required String model, required double price, required String unit, String? agentId}) async {
+    final db = await database;
+    final existing = await db.query('token_cost', where: 'model = ? AND agent_id IS ?', whereArgs: [model, agentId]);
+    if (existing.isNotEmpty) {
+      await db.update('token_cost', {'price': price, 'unit': unit}, where: 'model = ? AND agent_id IS ?', whereArgs: [model, agentId]);
+    } else {
+      await db.insert('token_cost', {'model': model, 'price': price, 'unit': unit, 'agent_id': agentId, 'created_at': DateTime.now().millisecondsSinceEpoch});
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getTokenPrice({required String model, String? agentId}) async {
+    final db = await database;
+    final maps = await db.query('token_cost', where: 'model = ? AND agent_id IS ?', whereArgs: [model, agentId]);
+    if (maps.isEmpty) return null;
+    return {'price': (maps.first['price'] as num).toDouble(), 'unit': maps.first['unit'] as String};
+  }
+
+  static Future<List<Map<String, dynamic>>> getAllTokenCosts() async {
+    final db = await database;
+    return await db.query('token_cost', orderBy: 'created_at DESC');
+  }
+
+  static Future<void> deleteTokenCost(String model, {String? agentId}) async {
+    final db = await database;
+    await db.delete('token_cost', where: 'model = ? AND agent_id IS ?', whereArgs: [model, agentId]);
   }
 
   // ─── 数据库备份与恢复 ─────────────

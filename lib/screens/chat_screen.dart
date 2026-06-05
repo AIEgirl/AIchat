@@ -21,6 +21,7 @@ import '../providers/memory_provider.dart';
 import '../providers/group_provider.dart';
 import '../models/agent.dart';
 import '../models/group_chat.dart';
+import '../services/agent_export_service.dart';
 import 'agent_create_screen.dart';
 import 'group_create_screen.dart';
 import 'group_chat_screen.dart';
@@ -202,6 +203,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final settings = ref.watch(settingsProvider);
     final model = settings.effectiveModel;
     final l10n = AppLocalizations.of(context);
+    final agent = ref.watch(agentProvider).currentAgent;
+    final appTitle = agent?.name ?? l10n.get('appTitle');
 
     return Scaffold(
       drawer: _buildDrawerMobile(),
@@ -214,7 +217,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(l10n.get('appTitle'),
+            Text(appTitle,
                 style: const TextStyle(
                     fontSize: 16, fontWeight: FontWeight.w600)),
             Text(model.isNotEmpty ? model : l10n.get('noModel'),
@@ -276,13 +279,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final l10n = AppLocalizations.of(context);
     final agentState = ref.watch(agentProvider);
     final scheme = Theme.of(context).colorScheme;
+    final appTitle = agentState.currentAgent?.name ?? l10n.get('appTitle');
 
     return Scaffold(
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(l10n.get('appTitle'),
+            Text(appTitle,
                 style: const TextStyle(
                     fontSize: 16, fontWeight: FontWeight.w600)),
             Text(model.isNotEmpty ? model : l10n.get('noModel'),
@@ -424,9 +428,87 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         selectedTileColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         onTap: () => _switchAgent(a, current),
-        onLongPress: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AgentCreateScreen(agent: a))),
+        onLongPress: () => _showSidebarAgentMenu(a, isCurrent, l10n),
       ),
     );
+  }
+
+  void _showSidebarAgentMenu(Agent a, bool isCurrent, AppLocalizations l10n) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: Text(l10n.get('edit')),
+            onTap: () {
+              Navigator.pop(ctx);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => AgentCreateScreen(agent: a)));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.file_upload),
+            title: Text(l10n.get('export')),
+            onTap: () {
+              Navigator.pop(ctx);
+              _exportAgentFromSidebar(a);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.delete, color: Colors.red),
+            title: Text(l10n.get('delete'), style: const TextStyle(color: Colors.red)),
+            enabled: !isCurrent,
+            onTap: isCurrent ? null : () {
+              Navigator.pop(ctx);
+              _confirmDeleteAgentFromSidebar(a);
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
+  void _exportAgentFromSidebar(Agent a) async {
+    try {
+      final l10n = AppLocalizations.of(context);
+      final data = await AgentExportService.exportAgent(a);
+      final jsonStr = const JsonEncoder.withIndent('  ').convert(data);
+      final dir = await pp.getApplicationDocumentsDirectory();
+      final fileName = '${a.name}_export.agent.json';
+      final file = File('${dir.path}/$fileName');
+      await file.writeAsString(jsonStr);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l10n.getP('agentExported', {'path': '${dir.path}/$fileName'}))));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${AppLocalizations.of(context).get('agentExportFailed')}: $e')));
+      }
+    }
+  }
+
+  void _confirmDeleteAgentFromSidebar(Agent a) {
+    final l10n = AppLocalizations.of(context);
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      icon: Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error, size: 32),
+      title: Text(l10n.get('confirmDeleteAgentTitle')),
+      content: Text(l10n.getP('confirmDeleteAgentContent', {'name': a.name, 'activeNote': ''})),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l10n.get('cancel'))),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () {
+            ref.read(agentProvider.notifier).deleteAgent(a.id);
+            Navigator.pop(ctx);
+          },
+          child: Text(l10n.get('delete')),
+        ),
+      ],
+    ));
   }
 
   Widget _groupListTile(GroupChat group, AppLocalizations l10n) {
@@ -438,9 +520,67 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: Text(group.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: group.id))),
-        onLongPress: () => Navigator.push(context, MaterialPageRoute(builder: (_) => GroupManageScreen(groupId: group.id))),
+        onLongPress: () => _showSidebarGroupMenu(group, l10n),
       ),
     );
+  }
+
+  void _showSidebarGroupMenu(GroupChat group, AppLocalizations l10n) {
+    final scheme = Theme.of(context).colorScheme;
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: Icon(Icons.chat_bubble_outline, color: scheme.primary),
+            title: Text(l10n.get('enterGroupChat')),
+            onTap: () {
+              Navigator.pop(ctx);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => GroupChatScreen(groupId: group.id)));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.edit),
+            title: Text(l10n.get('editGroup')),
+            onTap: () {
+              Navigator.pop(ctx);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => GroupManageScreen(groupId: group.id)));
+            },
+          ),
+          ListTile(
+            leading: Icon(Icons.delete, color: scheme.error),
+            title: Text(l10n.get('delete'), style: TextStyle(color: scheme.error)),
+            onTap: () {
+              Navigator.pop(ctx);
+              _confirmDeleteGroupFromSidebar(group);
+            },
+          ),
+        ]),
+      ),
+    );
+  }
+
+  void _confirmDeleteGroupFromSidebar(GroupChat group) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      icon: Icon(Icons.warning_amber_rounded, color: scheme.error, size: 32),
+      title: Text(l10n.get('confirmDelete')),
+      content: Text(l10n.getP('deleteGroupConfirmDetail', {'name': group.name})),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l10n.get('cancel'))),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
+          onPressed: () async {
+            await ref.read(groupProvider.notifier).deleteGroup(group.id);
+            Navigator.pop(ctx);
+          },
+          child: Text(l10n.get('delete')),
+        ),
+      ],
+    ));
   }
 
   Future<void> _switchAgent(Agent a, Agent? current) async {
@@ -1144,7 +1284,32 @@ class _AnimatedBubbleState extends State<_AnimatedBubble>
             style: const TextStyle(fontWeight: FontWeight.w600)),
         content: SizedBox(
           width: double.maxFinite,
-          child: ListView.builder(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.message.promptTokens != null || widget.message.completionTokens != null)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(l10n.get('tokenUsage'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 4),
+                    if (widget.message.promptTokens != null)
+                      Text('${l10n.get("promptTokens")}: ${widget.message.promptTokens}', style: const TextStyle(fontSize: 12)),
+                    if (widget.message.completionTokens != null)
+                      Text('${l10n.get("completionTokens")}: ${widget.message.completionTokens}', style: const TextStyle(fontSize: 12)),
+                    if (widget.message.promptTokens != null && widget.message.completionTokens != null)
+                      Text('${l10n.get("totalTokens")}: ${widget.message.promptTokens! + widget.message.completionTokens!}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              Flexible(
+                child: ListView.builder(
             shrinkWrap: true,
             itemCount: widget.message.toolLogs!.length,
             itemBuilder: (_, i) {
@@ -1192,6 +1357,9 @@ class _AnimatedBubbleState extends State<_AnimatedBubble>
                 ),
               );
             },
+          ),
+              ),
+            ],
           ),
         ),
         actions: [
