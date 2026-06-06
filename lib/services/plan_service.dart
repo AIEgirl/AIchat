@@ -8,14 +8,16 @@ import 'notification_service.dart';
 class PlanService {
   final NotificationService _notificationService;
   final Map<int, Timer> _timers = {};
+  String? _agentId;
 
-  /// 待触发回调：用于在应用前台时插入AI消息
   void Function(String message)? onPlanTriggered;
 
   PlanService({required NotificationService notificationService})
       : _notificationService = notificationService {
     tz.initializeTimeZones();
   }
+
+  void setAgentId(String? id) => _agentId = id;
 
   /// 解析 send_time 字符串为 DateTime
   static DateTime parseSendTime(String sendTime) {
@@ -44,6 +46,7 @@ class PlanService {
     final planned = PlannedMessage(
       scheduledTime: scheduledTime,
       message: message,
+      agentId: _agentId,
     );
     final id = await DatabaseService.insertPlannedMessage(planned);
 
@@ -87,7 +90,7 @@ class PlanService {
 
   /// 获取所有计划消息
   Future<List<PlannedMessage>> getPlannedMessages() async {
-    return await DatabaseService.getPlannedMessages();
+    return await DatabaseService.getPlannedMessages(agentId: _agentId);
   }
 
   /// 立即触发一条计划消息

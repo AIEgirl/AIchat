@@ -25,7 +25,15 @@ class DatabaseService {
   static Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'aichat.db');
-    final db = await openDatabase(path, version: 11, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    final db = await openDatabase(
+      path,
+      version: 14,
+      onConfigure: (db) async {
+        await db.rawQuery('PRAGMA journal_mode=WAL');
+      },
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
+    );
     await _ensureGroupTablesExist(db);
     return db;
   }
@@ -99,6 +107,20 @@ class DatabaseService {
       try { await db.execute("ALTER TABLE debug_logs ADD COLUMN completion_tokens INTEGER"); } catch (_) {}
       debugPrint('[DB] v11 migration: added token columns to debug_logs');
     }
+    if (oldVersion < 12) {
+      for (final table in ['long_term_memories', 'base_memories', 'short_term_messages', 'chat_messages', 'debug_logs', 'planned_messages', 'token_usage']) {
+        try { await db.execute("CREATE INDEX IF NOT EXISTS idx_${table}_agent ON $table(agent_id)"); } catch (_) {}
+      }
+      try { await db.execute("CREATE INDEX IF NOT EXISTS idx_long_term_memories_group ON long_term_memories(agent_id, group_id)"); } catch (_) {}
+      try { await db.execute("CREATE INDEX IF NOT EXISTS idx_base_memories_group ON base_memories(agent_id, group_id)"); } catch (_) {}
+      debugPrint('[DB] v12 migration: added agent_id indices');
+    }
+    if (oldVersion < 14) {
+      for (final table in ['long_term_memories', 'base_memories']) {
+        try { await db.delete(table, where: 'agent_id IS NULL OR agent_id = ?', whereArgs: ['']); } catch (_) {}
+      }
+      debugPrint('[DB] v14 migration: cleaned up records with null/empty agent_id in long_term_memories and base_memories');
+    }
   }
 
   // ─── Agents ──────────────────────────
@@ -133,11 +155,13 @@ class DatabaseService {
 
   static Future<void> deleteAgent(String id) async {
     final db = await database;
-    await db.delete('group_members', where: 'agent_id = ?', whereArgs: [id]);
-    await db.delete('agents', where: 'id = ?', whereArgs: [id]);
-    for (final table in ['long_term_memories', 'base_memories', 'short_term_messages', 'chat_messages', 'planned_messages']) {
-      await db.delete(table, where: 'agent_id = ?', whereArgs: [id]);
-    }
+    await db.transaction((txn) async {
+      await txn.delete('group_members', where: 'agent_id = ?', whereArgs: [id]);
+      await txn.delete('agents', where: 'id = ?', whereArgs: [id]);
+      for (final table in ['long_term_memories', 'base_memories', 'short_term_messages', 'chat_messages', 'planned_messages', 'debug_logs', 'token_usage']) {
+        await txn.delete(table, where: 'agent_id = ?', whereArgs: [id]);
+      }
+    });
   }
 
   static Future<void> setActiveAgent(String id) async {
@@ -200,6 +224,10 @@ class DatabaseService {
   static Future<List<LongTermMemory>> getLongTermMemories({String? agentId, String? groupId, bool privateOnly = true}) async {
     final db = await database;
     if (agentId != null) {
+      if (groupId != null) {
+        final maps = await db.query('long_term_memories', where: 'agent_id = ? AND group_id = ?', whereArgs: [agentId, groupId], orderBy: 'id ASC');
+        return maps.map(LongTermMemory.fromMap).toList();
+      }
       if (privateOnly) {
         final maps = await db.query('long_term_memories', where: 'agent_id = ? AND group_id IS NULL', whereArgs: [agentId], orderBy: 'id ASC');
         return maps.map(LongTermMemory.fromMap).toList();
@@ -216,14 +244,27 @@ class DatabaseService {
     await db.insert('long_term_memories', memory.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<void> updateLongTermMemory(LongTermMemory memory) async {
+  static Future<void> updateLongTermMemory(LongTermMemory memory, {String? agentId}) async {
     final db = await database;
-    await db.update('long_term_memories', {'field': memory.field, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch}, where: 'id = ?', whereArgs: [memory.id]);
+    if (agentId != null) {
+      await db.update('long_term_memories',
+        {'field': memory.field, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'id = ? AND agent_id = ?', whereArgs: [memory.id, agentId]);
+    } else {
+      await db.update('long_term_memories',
+        {'field': memory.field, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'id = ? AND agent_id IS NOT NULL', whereArgs: [memory.id]);
+    }
   }
 
-  static Future<void> deleteLongTermMemory(String id) async {
+  static Future<void> deleteLongTermMemory(String id, {String? agentId}) async {
     final db = await database;
-    await db.delete('long_term_memories', where: 'id = ?', whereArgs: [id]);
+    if (agentId != null) {
+      await db.delete('long_term_memories', where: 'id = ? AND agent_id = ?', whereArgs: [id, agentId]);
+    } else {
+      debugPrint('[DB] WARNING: deleteLongTermMemory called without agentId, only deleting by id where agent_id IS NOT NULL');
+      await db.delete('long_term_memories', where: 'id = ? AND agent_id IS NOT NULL', whereArgs: [id]);
+    }
   }
 
   static Future<void> clearLongTermMemories({String? agentId}) async {
@@ -240,6 +281,10 @@ class DatabaseService {
   static Future<List<BaseMemory>> getBaseMemories({String? agentId, String? groupId, bool privateOnly = true}) async {
     final db = await database;
     if (agentId != null) {
+      if (groupId != null) {
+        final maps = await db.query('base_memories', where: 'agent_id = ? AND group_id = ?', whereArgs: [agentId, groupId], orderBy: 'id ASC');
+        return maps.map(BaseMemory.fromMap).toList();
+      }
       if (privateOnly) {
         final maps = await db.query('base_memories', where: 'agent_id = ? AND group_id IS NULL', whereArgs: [agentId], orderBy: 'id ASC');
         return maps.map(BaseMemory.fromMap).toList();
@@ -256,14 +301,27 @@ class DatabaseService {
     await db.insert('base_memories', memory.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<void> updateBaseMemory(BaseMemory memory) async {
+  static Future<void> updateBaseMemory(BaseMemory memory, {String? agentId}) async {
     final db = await database;
-    await db.update('base_memories', {'type': memory.type, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch}, where: 'id = ?', whereArgs: [memory.id]);
+    if (agentId != null) {
+      await db.update('base_memories',
+        {'type': memory.type, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'id = ? AND agent_id = ?', whereArgs: [memory.id, agentId]);
+    } else {
+      await db.update('base_memories',
+        {'type': memory.type, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch},
+        where: 'id = ? AND agent_id IS NOT NULL', whereArgs: [memory.id]);
+    }
   }
 
-  static Future<void> deleteBaseMemory(String id) async {
+  static Future<void> deleteBaseMemory(String id, {String? agentId}) async {
     final db = await database;
-    await db.delete('base_memories', where: 'id = ?', whereArgs: [id]);
+    if (agentId != null) {
+      await db.delete('base_memories', where: 'id = ? AND agent_id = ?', whereArgs: [id, agentId]);
+    } else {
+      debugPrint('[DB] WARNING: deleteBaseMemory called without agentId, only deleting by id where agent_id IS NOT NULL');
+      await db.delete('base_memories', where: 'id = ? AND agent_id IS NOT NULL', whereArgs: [id]);
+    }
   }
 
   static Future<void> clearBaseMemories({String? agentId}) async {
@@ -312,9 +370,13 @@ class DatabaseService {
     await db.insert('short_term_messages', msg.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  static Future<void> deleteShortTermMessage(String id) async {
+  static Future<void> deleteShortTermMessage(String id, {String? agentId}) async {
     final db = await database;
-    await db.delete('short_term_messages', where: 'id = ?', whereArgs: [id]);
+    if (agentId != null) {
+      await db.delete('short_term_messages', where: 'id = ? AND agent_id = ?', whereArgs: [id, agentId]);
+    } else {
+      await db.delete('short_term_messages', where: 'id = ?', whereArgs: [id]);
+    }
   }
 
   static Future<void> clearShortTermMessages({String? agentId}) async {
@@ -381,9 +443,13 @@ class DatabaseService {
     return await db.query('debug_logs', orderBy: 'timestamp DESC');
   }
 
-  static Future<void> clearDebugLogs() async {
+  static Future<void> clearDebugLogs({String? agentId}) async {
     final db = await database;
-    await db.delete('debug_logs');
+    if (agentId != null) {
+      await db.delete('debug_logs', where: 'agent_id = ?', whereArgs: [agentId]);
+    } else {
+      await db.delete('debug_logs');
+    }
   }
 
   // ─── 计划消息 ──────────────────────
@@ -548,13 +614,13 @@ class DatabaseService {
 
   static Future<void> deleteGroupChat(String id) async {
     final db = await database;
-    await db.execute('PRAGMA foreign_keys = ON');
+    await db.rawQuery('PRAGMA foreign_keys = ON');
     await db.delete('group_chats', where: 'id = ?', whereArgs: [id]);
   }
 
   static Future<void> deleteGroupChatCascade(String groupId) async {
     final db = await database;
-    await db.execute('PRAGMA foreign_keys = ON');
+    await db.rawQuery('PRAGMA foreign_keys = ON');
     await db.delete('group_short_term', where: 'group_id = ?', whereArgs: [groupId]);
     await db.delete('group_shared_memories', where: 'group_id = ?', whereArgs: [groupId]);
     await db.delete('group_messages', where: 'group_id = ?', whereArgs: [groupId]);

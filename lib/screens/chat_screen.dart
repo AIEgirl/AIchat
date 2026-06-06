@@ -40,11 +40,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   File? _pendingImage;
   final FocusNode _inputFocus = FocusNode();
 
+  String? _lastAgentId;
+
   @override
   void initState() {
     super.initState();
 
-    // Defocus input on first frame to prevent keyboard auto-popup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _inputFocus.unfocus();
       final planService = ref.read(planServiceProvider);
@@ -190,6 +191,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = ResponsiveLayout.isDesktop(context);
+
+    ref.listen<AgentState>(agentProvider, (prev, next) {
+      final newId = next.currentAgent?.id;
+      if (newId != null && newId != _lastAgentId) {
+        _lastAgentId = newId;
+        ref.read(memoryServiceProvider).setAgentId(newId);
+        ref.read(planServiceProvider).setAgentId(newId);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ref.read(chatProvider.notifier).reloadChatFromDb(newId);
+          }
+        });
+      }
+    });
 
     if (isDesktop) {
       return _buildDesktopLayout();
@@ -587,17 +602,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (a.id == current?.id) return;
     await ref.read(agentProvider.notifier).setActiveAgent(a.id);
     ref.read(memoryServiceProvider).setAgentId(a.id);
+    ref.read(planServiceProvider).setAgentId(a.id);
     await ref.read(memoryServiceProvider).loadShortTermFromDb(ref.read(settingsProvider).maxShortTermRounds);
-    ref.read(chatProvider.notifier).reloadChatFromDb(a.id);
+    await ref.read(chatProvider.notifier).reloadChatFromDb(a.id);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(chatProvider.notifier).validateCurrentAgent();
+    });
   }
 
   // ═══ Shared Chat Body ═══
   Widget _buildChatBody(ChatState chatState) {
     return Builder(builder: (ctx) {
       final agent = ref.watch(agentProvider).currentAgent;
+      final agentId = agent?.id;
       final bg = agent?.chatBackground;
+
+      if (chatState.messages.isEmpty && !chatState.isLoading && agent == null) {
+        return Center(
+          child: Text(AppLocalizations.of(context).get('noAgentSelected'),
+              style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        );
+      }
+
       Widget body = Column(children: [
         Expanded(
+          key: ValueKey('chat_list_$agentId'),
           child: chatState.messages.isEmpty && !chatState.isLoading
               ? _buildEmptyState()
               : ListView.builder(
@@ -847,111 +876,113 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: scheme.surface,
         border: Border(
-          top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+          top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3)),
         ),
       ),
       child: SafeArea(
-        child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_pendingImage != null)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  height: 80,
-                  child: Stack(children: [
-                    ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(_pendingImage!,
-                            fit: BoxFit.cover)),
-                    Positioned(
-                        top: 0,
-                        right: 0,
-                        child: IconButton(
-                            icon: const Icon(Icons.close,
-                                size: 18, color: Colors.white),
-                            style: IconButton.styleFrom(
-                                backgroundColor:
-                                    Colors.black.withValues(alpha: 0.5),
-                                minimumSize: const Size(20, 20)),
-                            onPressed: () => setState(() =>
-                                _pendingImage = null))),
-                  ]),
-                ),
-              Row(children: [
-                IconButton(
-                    icon: const Icon(Icons.add_circle_outline,
-                        size: 28),
-                    onPressed: _showAttachmentOptions,
-                    tooltip: l10n.get('attachmentMenu')),
-                Expanded(
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(
-                            color: scheme.outlineVariant.withValues(alpha: 0.5))),
-                    child: CallbackShortcuts(
-                      bindings: {
-                        SingleActivator(
-                                LogicalKeyboardKey.enter,
-                                control: true): _sendMessageOrImage,
-                      },
-                      child: Focus(
-                        child: TextField(
-                          focusNode: _inputFocus,
-                          controller: _controller,
-                          decoration: InputDecoration(
-                              hintText: l10n.get('typeMessage'),
-                              border: InputBorder.none,
-                              filled: false,
-                              contentPadding: EdgeInsets.zero),
-                          maxLines: 4,
-                          minLines: 1,
-                          textInputAction: TextInputAction.newline,
-                          onSubmitted: (_) =>
-                              _sendMessageOrImage(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Tooltip(
-                  message: 'Send (Ctrl+Enter)',
-                  child: TweenAnimationBuilder<double>(
-                    key: ValueKey(_sendTrigger),
-                    tween: Tween(begin: 0.85, end: 1.0),
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutBack,
-                    builder: (ctx, value, child) =>
-                        Transform.scale(scale: value, child: child),
-                    child: Material(
-                      color: scheme.primary,
-                      shape: const CircleBorder(),
-                      elevation: 2,
-                      shadowColor: scheme.primary.withValues(alpha: 0.3),
-                      child: InkWell(
-                        customBorder: const CircleBorder(),
-                        onTap: _sendMessageOrImage,
-                        child: const SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: Icon(Icons.send_rounded,
-                              color: Colors.white, size: 20),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (_pendingImage != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              height: 80,
+              child: Stack(children: [
+                ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(_pendingImage!,
+                        fit: BoxFit.cover)),
+                Positioned(
+                    top: 0, right: 0,
+                    child: IconButton(
+                        icon: const Icon(Icons.close, size: 18, color: Colors.white),
+                        style: IconButton.styleFrom(
+                            backgroundColor: Colors.black.withValues(alpha: 0.5),
+                            minimumSize: const Size(20, 20)),
+                        onPressed: () => setState(() => _pendingImage = null))),
               ]),
+            ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+              boxShadow: [
+                BoxShadow(
+                  color: scheme.shadow.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(children: [
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline, size: 26),
+                onPressed: _showAttachmentOptions,
+                tooltip: l10n.get('attachmentMenu'),
+                splashRadius: 20,
+              ),
+              Expanded(
+                child: CallbackShortcuts(
+                  bindings: {
+                    SingleActivator(LogicalKeyboardKey.enter, control: true): _sendMessageOrImage,
+                  },
+                  child: TextField(
+                    focusNode: _inputFocus,
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      hintText: l10n.get('typeMessage'),
+                      border: InputBorder.none,
+                      filled: false,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+                    ),
+                    maxLines: 4,
+                    minLines: 1,
+                    textInputAction: TextInputAction.newline,
+                    onSubmitted: (_) => _sendMessageOrImage(),
+                  ),
+                ),
+              ),
+              Tooltip(
+                message: 'Send (Ctrl+Enter)',
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey(_sendTrigger),
+                  tween: Tween(begin: 0.8, end: 1.0),
+                  duration: AppTheme.durFast,
+                  curve: Curves.easeOutBack,
+                  builder: (ctx, value, child) =>
+                      Transform.scale(scale: value, child: child),
+                  child: Material(
+                    color: _controller.text.trim().isEmpty
+                        ? scheme.onSurface.withValues(alpha: 0.12)
+                        : scheme.primary,
+                    shape: const CircleBorder(),
+                    elevation: _controller.text.trim().isEmpty ? 0 : 2,
+                    shadowColor: scheme.primary.withValues(alpha: 0.3),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: _sendMessageOrImage,
+                      child: SizedBox(
+                        width: 42,
+                        height: 42,
+                        child: Icon(
+                          Icons.send_rounded,
+                          color: _controller.text.trim().isEmpty
+                              ? scheme.onSurfaceVariant
+                              : Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ]),
+          ),
+        ]),
       ),
     );
   }

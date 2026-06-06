@@ -3,23 +3,522 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#4a6fa5" media="(prefers-color-scheme: light)">
-    <meta name="theme-color" content="#111418" media="(prefers-color-scheme: dark)">
-    <meta name="description" content="AI 记忆聊天 — 会记忆的智能聊天伙伴。">
-    <link rel="preconnect" href="https://github.com" crossorigin>
-    <link rel="dns-prefetch" href="https://github.com">
-    <link rel="stylesheet" href="style.css">
-    <title>AI 记忆聊天 — 会记忆的智能聊天伙伴</title>
+    <title>AIchat — 会记忆的智能聊天伙伴</title>
+    <style>
+        :root {
+            /* 浅色主题 */
+            --bg: #f8f9fa;
+            --surface: #ffffff;
+            --surface2: #f1f3f5;
+            --surface3: #e9ecef;
+            --primary: #4a6fa5;
+            --primary-glow: rgba(74, 111, 165, 0.25);
+            --accent: #6c8db0;
+            --text: #212529;
+            --text2: #495057;
+            --text3: #868e96;
+            --border: #dee2e6;
+            --shadow: 0 4px 16px rgba(0,0,0,0.04);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+            --radius-sm: 8px;
+            --radius: 14px;
+            --radius-lg: 20px;
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --font-sans: 'Inter', 'PingFang SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+        }
+
+        [data-theme="dark"] {
+            --bg: #111418;
+            --surface: #1a1d23;
+            --surface2: #21252b;
+            --surface3: #2a2e36;
+            --primary: #8ab4d6;
+            --primary-glow: rgba(138, 180, 214, 0.25);
+            --accent: #a0c0db;
+            --text: #e9ecef;
+            --text2: #adb5bd;
+            --text3: #6c757d;
+            --border: #2f3339;
+            --shadow: 0 4px 16px rgba(0,0,0,0.3);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html { scroll-behavior: smooth; font-size: 16px; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            overflow-x: hidden;
+            transition: background 0.3s ease, color 0.3s ease;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* 主题切换按钮 */
+        .theme-toggle {
+            position: fixed;
+            bottom: 28px;
+            right: 28px;
+            z-index: 1100;
+            width: 46px;
+            height: 46px;
+            border-radius: 50%;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text2);
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .theme-toggle:hover {
+            background: var(--surface2);
+            color: var(--text);
+            transform: scale(1.08);
+            box-shadow: var(--shadow-lg);
+        }
+
+        /* 导航栏 */
+        .navbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 1000;
+            background: rgba(248, 249, 250, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            transition: var(--transition);
+        }
+        [data-theme="dark"] .navbar {
+            background: rgba(17, 20, 24, 0.8);
+        }
+        .navbar-inner {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 28px;
+            height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .navbar .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 700;
+            font-size: 1.3rem;
+            color: var(--text);
+            text-decoration: none;
+            letter-spacing: -0.02em;
+        }
+        .logo .icon-dot {
+            width: 32px;
+            height: 32px;
+            border-radius: 9px;
+            background: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 1rem;
+            transition: var(--transition);
+        }
+
+        /* 导航链接容器 */
+        .nav-links {
+            display: flex;
+            gap: 4px;
+            list-style: none;
+            align-items: center;
+        }
+        .nav-links a {
+            color: var(--text2);
+            text-decoration: none;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: var(--transition);
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .nav-links a:hover {
+            color: var(--text);
+            background: var(--surface2);
+        }
+        .nav-links a.nav-cta {
+            background: var(--primary);
+            color: #fff;
+            font-weight: 600;
+        }
+        .nav-links a.nav-cta:hover {
+            opacity: 0.9;
+            box-shadow: 0 4px 12px var(--primary-glow);
+        }
+
+        /* GitHub 图标 */
+        .nav-links .github-link {
+            padding: 8px;
+            border-radius: 50%;
+            margin-left: 4px;
+        }
+        .nav-links .github-link svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+        .nav-links .github-link:hover {
+            background: var(--surface2);
+            color: var(--text);
+        }
+
+        /* 汉堡菜单按钮 (移动端) */
+        .hamburger {
+            display: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 8px;
+            color: var(--text);
+            transition: var(--transition);
+        }
+        .hamburger:hover {
+            background: var(--surface2);
+        }
+        .hamburger .bar {
+            display: block;
+            width: 22px;
+            height: 2px;
+            background: currentColor;
+            margin: 5px 0;
+            border-radius: 2px;
+            transition: 0.3s;
+        }
+        .hamburger.open .bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+        .hamburger.open .bar:nth-child(2) { opacity: 0; }
+        .hamburger.open .bar:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+        /* 通用区块 */
+        .section {
+            position: relative;
+            z-index: 1;
+            padding: 80px 28px;
+            max-width: 1140px;
+            margin: 0 auto;
+        }
+        .section-label {
+            display: inline-block;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--primary);
+            margin-bottom: 12px;
+        }
+        .section h2 {
+            font-size: 1.9rem;
+            font-weight: 700;
+            margin-bottom: 14px;
+            letter-spacing: -0.02em;
+            color: var(--text);
+        }
+        .section .section-desc {
+            color: var(--text2);
+            font-size: 1.05rem;
+            max-width: 620px;
+            margin-bottom: 44px;
+            line-height: 1.65;
+        }
+
+        /* Hero */
+        .hero {
+            min-height: 90vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 120px 28px 80px;
+        }
+        .hero-content { max-width: 720px; }
+        .hero .badge {
+            display: inline-block;
+            padding: 5px 16px;
+            border-radius: 50px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--primary);
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 24px;
+        }
+
+        /* 标题打字光照效果 */
+        .hero h1 {
+            font-size: clamp(2.4rem, 5.5vw, 4rem);
+            font-weight: 750;
+            letter-spacing: -0.03em;
+            margin-bottom: 18px;
+            color: var(--text);
+            display: inline-block;
+            overflow: hidden;
+            white-space: nowrap;
+            width: 0;
+            animation: typing 0.8s steps(6) forwards, glowPulse 2s ease-in-out 0.8s infinite alternate;
+            background: linear-gradient(90deg, var(--primary), #fff, var(--primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            background-size: 200% 100%;
+            border-right: 2px solid transparent;
+        }
+        @keyframes typing {
+            from { width: 0; }
+            to { width: 6ch; }
+        }
+        @keyframes glowPulse {
+            0% { background-position: 0% 50%; text-shadow: 0 0 8px rgba(74,111,165,0.3); }
+            100% { background-position: 100% 50%; text-shadow: 0 0 18px rgba(138,180,214,0.6); }
+        }
+
+        .hero .subtitle {
+            font-size: 1.15rem;
+            color: var(--text2);
+            margin-bottom: 32px;
+            line-height: 1.7;
+            max-width: 600px;
+            margin-left: auto; margin-right: auto;
+        }
+        /* 关键词弹性放大动画 */
+        .highlight-text {
+            display: inline-block;
+            font-weight: 700;
+            animation: elasticPop 1.2s cubic-bezier(0.68, -0.55, 0.27, 1.55) 1.2s both;
+        }
+        @keyframes elasticPop {
+            0% { transform: scale(1); opacity: 0; }
+            30% { transform: scale(1.25); opacity: 1; }
+            50% { transform: scale(0.9); }
+            70% { transform: scale(1.05); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .btn-group { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 26px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            text-decoration: none;
+            cursor: pointer;
+            transition: var(--transition);
+            border: 1.5px solid transparent;
+            letter-spacing: 0.01em;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            border-color: var(--primary);
+            box-shadow: 0 4px 14px var(--primary-glow);
+        }
+        .btn-primary::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -75%;
+            width: 50%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transform: skewX(-25deg);
+            transition: 0.5s;
+        }
+        .btn-primary:hover::after {
+            left: 120%;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px var(--primary-glow);
+        }
+        .btn-outline {
+            background: transparent;
+            color: var(--text);
+            border-color: var(--border);
+        }
+        .btn-outline:hover {
+            background: var(--surface2);
+            border-color: var(--primary);
+        }
+
+        /* 卡片网格 */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 20px;
+        }
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 26px 24px;
+            box-shadow: var(--shadow);
+            opacity: 0;
+            transform: translateY(25px);
+            transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .feature-card.visible { opacity: 1; transform: translateY(0); }
+        .feature-card:hover {
+            border-color: var(--primary);
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-3px);
+        }
+        .feature-card .icon {
+            width: 44px; height: 44px;
+            border-radius: var(--radius-sm);
+            background: var(--surface2);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 14px;
+        }
+        .feature-card h3 { font-size: 1.1rem; margin-bottom: 6px; font-weight: 650; color: var(--text); }
+        .feature-card p { color: var(--text2); font-size: 0.92rem; line-height: 1.6; }
+
+        .memory-tiers {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .memory-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 28px 24px;
+            box-shadow: var(--shadow);
+            opacity: 0;
+            transform: translateY(25px);
+            transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .memory-card.visible { opacity: 1; transform: translateY(0); }
+        .memory-card:hover { border-color: var(--primary); box-shadow: var(--shadow-lg); transform: translateY(-3px); }
+        .memory-card .tier-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 50px;
+            font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em;
+            margin-bottom: 12px;
+            background: var(--surface2);
+            color: var(--primary);
+            border: 1px solid var(--border);
+        }
+        .memory-card h3 { font-size: 1.2rem; margin-bottom: 6px; font-weight: 650; }
+        .memory-card .specs { color: var(--text2); font-size: 0.92rem; line-height: 1.7; }
+
+        .provider-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            gap: 16px;
+        }
+        .provider-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 16px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.5s ease, transform 0.5s ease, box-shadow 0.2s ease;
+        }
+        .provider-card.visible { opacity: 1; transform: translateY(0); }
+        .provider-card:hover { border-color: var(--primary); box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+        .provider-card .prov-name { font-weight: 700; font-size: 1rem; color: var(--text); }
+        .provider-card .prov-model { color: var(--text3); font-size: 0.78rem; margin-top: 4px; }
+
+        .footer {
+            text-align: center;
+            padding: 36px 28px;
+            border-top: 1px solid var(--border);
+            color: var(--text3);
+            font-size: 0.85rem;
+            background: var(--surface);
+        }
+        .footer .tech-stack {
+            display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 14px;
+        }
+        .footer .tech-stack span {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            padding: 4px 12px;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            color: var(--text2);
+        }
+        .footer .disclaimer { margin-top: 14px; font-size: 0.7rem; opacity: 0.7; }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .navbar-inner { padding: 0 16px; }
+            .hero { padding: 100px 16px 50px; min-height: auto; }
+            .section { padding: 55px 16px; }
+            .section h2 { font-size: 1.5rem; }
+            .features-grid { grid-template-columns: 1fr; }
+
+            /* 移动端菜单 */
+            .hamburger { display: block; }
+            .nav-links {
+                position: absolute;
+                top: 58px;
+                left: 0;
+                right: 0;
+                background: var(--surface);
+                flex-direction: column;
+                align-items: stretch;
+                gap: 2px;
+                padding: 8px 16px;
+                border-bottom: 1px solid var(--border);
+                box-shadow: var(--shadow-lg);
+                transform: translateY(-120%);
+                opacity: 0;
+                pointer-events: none;
+                transition: transform 0.3s ease, opacity 0.3s ease;
+            }
+            .nav-links.active {
+                transform: translateY(0);
+                opacity: 1;
+                pointer-events: auto;
+            }
+            .nav-links a {
+                padding: 12px 16px;
+                border-radius: 12px;
+            }
+        }
+    </style>
 </head>
 <body>
-
     <nav class="navbar">
         <div class="navbar-inner">
             <a href="#" class="logo">
                 <span class="icon-dot">🧠</span>
-                AI 记忆聊天
+                AIchat
             </a>
-            <ul class="nav-links">
+            <button class="hamburger" id="hamburgerBtn" aria-label="菜单">
+                <span class="bar"></span>
+                <span class="bar"></span>
+                <span class="bar"></span>
+            </button>
+            <ul class="nav-links" id="navLinks">
                 <li><a href="#features">亮点</a></li>
                 <li><a href="#memory">记忆</a></li>
                 <li><a href="#group">群聊</a></li>
@@ -42,9 +541,11 @@
     <section class="hero">
         <div class="hero-content">
             <span class="badge">✨ v2.0 · 会记忆的聊天伙伴</span>
-            <h1>AI 记忆聊天</h1>
+            <h1>AIchat</h1>
             <p class="subtitle">
-                它不是一个转身就忘的聊天机器人，而是一个<strong>真正记住你、关心你、理解你</strong>的智能伴侣。<br>
+                它不是一个转身就忘的聊天机器人，而是一个<br>
+                <span class="highlight-text">真正记住你、关心你、理解你</span><br>
+                的智能伴侣。<br>
                 从日常倾诉到角色扮演，再到与多个AI朋友群聊，给你温暖而真实的陪伴。
             </p>
             <div class="btn-group">
@@ -134,7 +635,7 @@
     <section class="section" id="get-started" style="text-align:center;">
         <h2>准备好遇见你的AI伙伴了吗？</h2>
         <p style="color:var(--text2);margin-bottom:28px;">支持 Android 与 iOS，选择一个供应商，马上开始你们的第一次对话。</p>
-        <a href="#" class="btn btn-primary" style="font-size:1rem;padding:14px 34px;">🚀 下载 AI 记忆聊天</a>
+        <a href="#" class="btn btn-primary" style="font-size:1rem;padding:14px 34px;">🚀 下载 AIchat</a>
     </section>
 
     <footer class="footer">
@@ -144,12 +645,76 @@
             <span>Material 3 设计</span>
             <span>多语言支持</span>
         </div>
-        <p>AI 记忆聊天 v2.0 · 持续更新中 · 给注重情感连接的对话体验</p>
+        <p>AIchat v2.0 · 持续更新中 · 给注重情感连接的对话体验</p>
         <div class="disclaimer">
             ⚠️ 本软件由AI辅助编程生成，如果您对AI参与开发感到不适，请酌情使用。
         </div>
     </footer>
 
-    <script src="script.js" defer></script>
+    <script>
+        (function() {
+            // 主题切换
+            const html = document.documentElement;
+            const toggleBtn = document.getElementById('themeToggle');
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            html.setAttribute('data-theme', savedTheme);
+            updateToggleIcon(savedTheme);
+
+            toggleBtn.addEventListener('click', () => {
+                const current = html.getAttribute('data-theme');
+                const next = current === 'light' ? 'dark' : 'light';
+                html.setAttribute('data-theme', next);
+                localStorage.setItem('theme', next);
+                updateToggleIcon(next);
+            });
+
+            function updateToggleIcon(theme) {
+                toggleBtn.textContent = theme === 'light' ? '🌙' : '☀️';
+            }
+
+            // 汉堡菜单
+            const hamburger = document.getElementById('hamburgerBtn');
+            const navLinks = document.getElementById('navLinks');
+            hamburger.addEventListener('click', () => {
+                hamburger.classList.toggle('open');
+                navLinks.classList.toggle('active');
+            });
+
+            // 点击导航链接后关闭菜单
+            navLinks.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', () => {
+                    hamburger.classList.remove('open');
+                    navLinks.classList.remove('active');
+                });
+            });
+
+            // 滚动渐显动画
+            const observerOptions = {
+                threshold: 0.15,
+                rootMargin: '0px 0px -30px 0px'
+            };
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, observerOptions);
+
+            const animElements = document.querySelectorAll('.feature-card, .memory-card, .provider-card');
+            animElements.forEach(el => observer.observe(el));
+
+            window.addEventListener('load', () => {
+                animElements.forEach(el => {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.top < window.innerHeight - 50) {
+                        el.classList.add('visible');
+                        observer.unobserve(el);
+                    }
+                });
+            });
+        })();
+    </script>
 </body>
 </html>

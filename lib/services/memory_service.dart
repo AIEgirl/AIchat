@@ -10,16 +10,24 @@ class MemoryService {
   String? _agentId;
   String? _groupId;
 
+  final Map<String, _MemorySnapshot> _cache = {};
+
   List<ShortTermMessage> get shortTermMessages => List.unmodifiable(_shortTermMessages);
 
   void setAgentId(String? id) {
     if (_agentId != id) {
       _agentId = id;
-      _groupId = null;  // Switching agents resets to private chat scope
+      _groupId = null;
       _shortTermMessages.clear();
       _shortTermSeq = 0;
     }
   }
+
+  void _invalidateCache(String? key) {
+    if (key != null) _cache.remove(key);
+  }
+
+  void invalidateCurrentCache() => _invalidateCache(_agentId);
 
   String? get agentId => _agentId;
 
@@ -52,16 +60,19 @@ class MemoryService {
   void _trimShortTerm() {
     while (_shortTermMessages.length > maxShortTermRounds) {
       final removed = _shortTermMessages.removeAt(0);
-      DatabaseService.deleteShortTermMessage(removed.id);
+      DatabaseService.deleteShortTermMessage(removed.id, agentId: _agentId);
     }
   }
 
   void clearShortTerm() {
     for (final msg in _shortTermMessages) {
-      DatabaseService.deleteShortTermMessage(msg.id);
+      DatabaseService.deleteShortTermMessage(msg.id, agentId: _agentId);
     }
     _shortTermMessages.clear();
     _shortTermSeq = 0;
+    if (_agentId != null) {
+      DatabaseService.clearShortTermMessages(agentId: _agentId!);
+    }
   }
 
   List<Map<String, dynamic>> getShortTermAsMessages() {
@@ -72,18 +83,19 @@ class MemoryService {
     final keep = keepRounds.clamp(1, maxShortTermRounds);
     while (_shortTermMessages.length > keep) {
       final removed = _shortTermMessages.removeAt(0);
-      DatabaseService.deleteShortTermMessage(removed.id);
+      DatabaseService.deleteShortTermMessage(removed.id, agentId: _agentId);
     }
   }
 
   Future<void> deleteShortTermMessage(String id) async {
     _shortTermMessages.removeWhere((m) => m.id == id);
-    await DatabaseService.deleteShortTermMessage(id);
+    await DatabaseService.deleteShortTermMessage(id, agentId: _agentId);
   }
 
   // ─── 长期记忆 ────
 
   Future<String> createLongTermMemory({required String field, required String content}) async {
+    _invalidateCache(_agentId);
     final maxNum = await DatabaseService.getMaxLongTermIdNumber(agentId: _agentId, groupId: _groupId);
     final newId = 'L${(maxNum + 1).toString().padLeft(3, '0')}';
     final memory = LongTermMemory(id: newId, field: field, content: content, agentId: _agentId, groupId: _groupId);
@@ -92,17 +104,24 @@ class MemoryService {
   }
 
   Future<void> updateLongTermMemory({required String targetId, required String content, String? field}) async {
-    final all = await DatabaseService.getLongTermMemories(agentId: _agentId);
-    final existing = all.firstWhere((m) => m.id == targetId);
-    await DatabaseService.updateLongTermMemory(existing.copyWith(content: content, field: field ?? existing.field, updatedAt: DateTime.now()));
+    _invalidateCache(_agentId);
+    await DatabaseService.updateLongTermMemory(
+      LongTermMemory(id: targetId, field: field ?? 'status', content: content, agentId: _agentId),
+      agentId: _agentId,
+    );
   }
 
   Future<void> deleteLongTermMemory(String id) async {
-    await DatabaseService.deleteLongTermMemory(id);
+    _invalidateCache(_agentId);
+    await DatabaseService.deleteLongTermMemory(id, agentId: _agentId);
   }
 
   Future<List<LongTermMemory>> getLongTermMemories() async {
-    return await DatabaseService.getLongTermMemories(agentId: _agentId);
+    final result = await DatabaseService.getLongTermMemories(agentId: _agentId, groupId: _groupId);
+    if (_agentId != null) {
+      _cache[_agentId!] = (_cache[_agentId!] ?? _MemorySnapshot()).copyWith(longTerm: result);
+    }
+    return result;
   }
 
   Future<List<LongTermMemory>> compressLongTerm(int keepCount) async {
@@ -119,6 +138,7 @@ class MemoryService {
   // ─── 基础记忆 ────
 
   Future<String> createBaseMemory({required String type, required String content}) async {
+    _invalidateCache(_agentId);
     final maxNum = await DatabaseService.getMaxBaseIdNumber(agentId: _agentId, groupId: _groupId);
     final newId = 'B${(maxNum + 1).toString().padLeft(3, '0')}';
     final memory = BaseMemory(id: newId, type: type, content: content, agentId: _agentId, groupId: _groupId);
@@ -127,15 +147,21 @@ class MemoryService {
   }
 
   Future<void> updateBaseMemory(BaseMemory memory) async {
-    await DatabaseService.updateBaseMemory(memory);
+    _invalidateCache(_agentId);
+    await DatabaseService.updateBaseMemory(memory, agentId: _agentId);
   }
 
   Future<void> deleteBaseMemory(String id) async {
-    await DatabaseService.deleteBaseMemory(id);
+    _invalidateCache(_agentId);
+    await DatabaseService.deleteBaseMemory(id, agentId: _agentId);
   }
 
   Future<List<BaseMemory>> getBaseMemories() async {
-    return await DatabaseService.getBaseMemories(agentId: _agentId);
+    final result = await DatabaseService.getBaseMemories(agentId: _agentId, groupId: _groupId);
+    if (_agentId != null) {
+      _cache[_agentId!] = (_cache[_agentId!] ?? _MemorySnapshot()).copyWith(base: result);
+    }
+    return result;
   }
 
   Future<List<BaseMemory>> compressBaseMemories(int keepEventCount) async {
@@ -181,4 +207,12 @@ class MemoryService {
     for (final m in base) { total += estimateTokens(m.content); }
     return total;
   }
+}
+
+class _MemorySnapshot {
+  final List<LongTermMemory> longTerm;
+  final List<BaseMemory> base;
+  const _MemorySnapshot({this.longTerm = const [], this.base = const []});
+  _MemorySnapshot copyWith({List<LongTermMemory>? longTerm, List<BaseMemory>? base}) =>
+      _MemorySnapshot(longTerm: longTerm ?? this.longTerm, base: base ?? this.base);
 }

@@ -118,6 +118,8 @@ class ChatNotifier extends StateNotifier<ChatState> {
   Future<void> _init() async {
     final settings = _ref.read(settingsProvider);
     _memoryService.maxShortTermRounds = settings.maxShortTermRounds;
+    _memoryService.setAgentId(_agentId);
+    _ref.read(planServiceProvider).setAgentId(_agentId);
     await _memoryService.loadShortTermFromDb(settings.maxShortTermRounds);
     await _loadChatMessagesFromDb();
     _startProactiveCheck();
@@ -141,8 +143,11 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
   Future<void> reloadChatFromDb([String? agentId]) async {
     state = state.copyWith(messages: []);
-    await _loadChatMessagesFromDb(agentId: agentId);
     final effectiveId = agentId ?? _agentId;
+    _memoryService.setAgentId(effectiveId);
+    _ref.read(planServiceProvider).setAgentId(effectiveId);
+    await _memoryService.loadShortTermFromDb(_ref.read(settingsProvider).maxShortTermRounds);
+    await _loadChatMessagesFromDb(agentId: agentId);
     if (state.messages.isEmpty && effectiveId != null) {
       final agent = _ref.read(agentProvider).agents.where((a) => a.id == effectiveId).firstOrNull;
       if (agent?.openingLine != null && agent!.openingLine!.isNotEmpty) {
@@ -153,6 +158,22 @@ class ChatNotifier extends StateNotifier<ChatState> {
         _saveChatMessageToDb(aiMsg);
       }
     }
+  }
+
+  Future<void> validateCurrentAgent() async {
+    final currentId = _agentId;
+    if (currentId == null) return;
+    final msgs = state.messages;
+    if (msgs.isNotEmpty) {
+      final firstMsg = await DatabaseService.getChatMessages(agentId: currentId);
+      final localIds = msgs.where((m) => m.dbId != null).map((m) => m.dbId!).toSet();
+      final dbIds = firstMsg.map((r) => r['id'] as int).toSet();
+      if (!localIds.every((id) => dbIds.contains(id))) {
+        _log('VALIDATE mismatch for agent=$currentId, reloading chat');
+        await reloadChatFromDb(currentId);
+      }
+    }
+    _log('VALIDATE OK | agent=$currentId messages=${state.messages.length}');
   }
 
   /// 清空当前智能体的聊天记录
@@ -843,12 +864,16 @@ $basePrompt''';
       prompt += '\n\n用户已经 $extraProactiveHint 小时没有说话，请主动发送一条温暖、简短的关心消息，并用 chat 工具输出。不要询问用户为什么沉默，也不要提及时间间隔。';
     }
 
+    final ltCount = (await _memoryService.getLongTermMemories()).length;
+    final bsCount = (await _memoryService.getBaseMemories()).length;
+    _log('PROMPT ASSERT | agent=$_agentId memories LT=$ltCount BM=$bsCount prompt=${prompt.length}chars');
+
     return prompt;
   }
 
   void clearChat() {
     _memoryService.clearShortTerm();
-    DatabaseService.clearChatMessages();
+    DatabaseService.clearChatMessages(agentId: _agentId);
     state = state.copyWith(messages: [], error: null, debugMessages: []);
   }
 

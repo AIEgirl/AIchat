@@ -1,0 +1,18 @@
+server:
+  port: 8090
+  mode: release
+  static_dir: ""
+  frontend_dir: "../main/frontend"
+
+database:
+  driver: sqlite
+  path: "data/providerhub.db"
+
+jwt:
+  secret: "providerhub-secret-key-change-in-production"
+  expire_hours: 24
+
+security:
+  rate_limit: 100
+  enable_ddos: true
+  bcrypt_cost: 12

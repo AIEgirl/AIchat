@@ -10,6 +10,7 @@ import '../services/tool_executor.dart';
 import '../services/database_service.dart';
 import '../providers/settings_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/memory_provider.dart';
 
 final groupServiceProvider = Provider<GroupService>((ref) {
   return GroupService();
@@ -336,7 +337,14 @@ class GroupNotifier extends StateNotifier<GroupState> {
     required String agentName,
     required String groupId,
   }) async {
-    ToolExecutor toolExecutor = _ref.read(toolExecutorProvider);
+    ToolExecutor toolExecutor = ToolExecutor(
+      memoryService: _ref.read(memoryServiceProvider),
+      planService: _ref.read(planServiceProvider),
+      groupService: _groupService,
+    );
+    _groupService.setActiveGroup(groupId);
+    toolExecutor.memoryService.setAgentId(agentId);
+    toolExecutor.memoryService.setGroupId(groupId);
 
     var response = await apiService.chatCompletion(
         messages: apiMessages, tools: tools);

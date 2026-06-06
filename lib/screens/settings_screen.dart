@@ -849,46 +849,65 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget _buildThemeSection() {
     final s = ref.watch(settingsProvider);
     final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
     return _sectionCard(children: [
-      Padding(padding: const EdgeInsets.all(12), child: Column(children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.brightness_6),
-          title: Text(l10n.get('themeMode')),
-          trailing: SegmentedButton<String>(
-            segments: [
-              ButtonSegment(value: 'system', label: Text(l10n.get('autoTheme'), style: const TextStyle(fontSize: 12))),
-              ButtonSegment(value: 'light', label: Text(l10n.get('lightTheme'), style: const TextStyle(fontSize: 12))),
-              ButtonSegment(value: 'dark', label: Text(l10n.get('darkTheme'), style: const TextStyle(fontSize: 12))),
-            ],
-            selected: {s.themeMode},
-            onSelectionChanged: (v) => ref.read(settingsProvider.notifier).updateThemeMode(v.first),
-          ),
-        ),
-        const Divider(),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.palette),
-          title: Text(l10n.get('themeColor')),
-          trailing: Wrap(spacing: 6, children: [
-            0xFF3F51B5, 0xFFE91E63, 0xFF009688, 0xFF673AB7,
-            0xFFFF5722, 0xFF4CAF50, 0xFF2196F3, 0xFFFF9800,
-          ].map((c) => GestureDetector(
-            onTap: () => ref.read(settingsProvider.notifier).updatePrimaryColor(c),
-            child: Container(
-              width: 28, height: 28,
-              decoration: BoxDecoration(
-                color: Color(c),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: s.primaryColor == c ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.outlineVariant,
-                  width: s.primaryColor == c ? 3 : 1,
-                ),
-                boxShadow: s.primaryColor == c ? AppTheme.shadowSm : null,
-              ),
+      Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
             ),
-          )).toList()),
+            child: Icon(Icons.brightness_6, size: 18, color: scheme.onPrimaryContainer),
+          ),
+          const SizedBox(width: 12),
+          Text(l10n.get('themeMode'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        ]),
+        const SizedBox(height: 10),
+        SegmentedButton<String>(
+          segments: [
+            ButtonSegment(value: 'system', label: Text(l10n.get('autoTheme'), style: const TextStyle(fontSize: 12))),
+            ButtonSegment(value: 'light', label: Text(l10n.get('lightTheme'), style: const TextStyle(fontSize: 12))),
+            ButtonSegment(value: 'dark', label: Text(l10n.get('darkTheme'), style: const TextStyle(fontSize: 12))),
+          ],
+          selected: {s.themeMode},
+          onSelectionChanged: (v) => ref.read(settingsProvider.notifier).updateThemeMode(v.first),
         ),
+        const SizedBox(height: 16),
+        const Divider(),
+        const SizedBox(height: 12),
+        Row(children: [
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.palette, size: 18, color: scheme.onPrimaryContainer),
+          ),
+          const SizedBox(width: 12),
+          Text(l10n.get('themeColor'), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+        ]),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, children: [
+          0xFF3F51B5, 0xFFE91E63, 0xFF009688, 0xFF673AB7,
+          0xFFFF5722, 0xFF4CAF50, 0xFF2196F3, 0xFFFF9800,
+        ].map((c) => GestureDetector(
+          onTap: () => ref.read(settingsProvider.notifier).updatePrimaryColor(c),
+          child: Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(
+              color: Color(c),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: s.primaryColor == c ? scheme.onSurface : scheme.outlineVariant,
+                width: s.primaryColor == c ? 3 : 1,
+              ),
+              boxShadow: s.primaryColor == c ? AppTheme.shadowSm : null,
+            ),
+          ),
+        )).toList()),
       ])),
     ]);
   }

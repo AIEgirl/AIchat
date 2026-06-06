@@ -9,6 +9,7 @@ import 'services/plugin_manager.dart';
 import 'providers/chat_provider.dart';
 import 'providers/agent_provider.dart';
 import 'providers/settings_provider.dart';
+import 'providers/memory_provider.dart';
 import 'l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
 import 'screens/chat_screen.dart';

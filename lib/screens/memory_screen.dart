@@ -232,11 +232,10 @@ class _LongTermTab extends ConsumerWidget {
             FilledButton(
               onPressed: () async {
                 if (contentController.text.trim().isNotEmpty) {
-                  await ref.read(memoryServiceProvider).createLongTermMemory(
+                  ref.read(longTermProvider.notifier).addMemory(
                         field: selectedField,
                         content: contentController.text.trim(),
                       );
-                  ref.read(longTermProvider.notifier).loadMemories();
                   Navigator.pop(ctx);
                 }
               },
