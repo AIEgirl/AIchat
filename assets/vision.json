@@ -1,0 +1,13 @@
+{
+    "vision":{
+        "Software version": 1 ,
+        "Iteration version": 0 ,
+        "describe":{
+            "English": "Initial release" ,
+            "Chinese": "初始版本"
+        } ,
+        "importance" : false ,
+        "_comment": "Bundled version — overwritten by remote at startup",
+        "package":""
+    }
+}

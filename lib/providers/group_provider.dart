@@ -80,6 +80,8 @@ class GroupNotifier extends StateNotifier<GroupState> {
     String? groupPersona,
     String speechMode = 'free',
     required List<GroupMember> members,
+    bool isSimulatorMode = false,
+    String? worldSetting,
   }) async {
     _glog('createGroup START: name=$name members.count=${members.length}');
     for (final m in members) {
@@ -91,12 +93,17 @@ class GroupNotifier extends StateNotifier<GroupState> {
       avatarColor: avatarColor,
       groupPersona: groupPersona,
       speechMode: speechMode,
+      isSimulatorMode: isSimulatorMode,
+      worldSetting: worldSetting,
     );
     _glog('  created GroupChat id=${group.id}');
     await _groupService.createGroup(group, members);
     await loadGroups();
     _glog('  loadGroups returned ${state.groups.length} groups');
     await loadGroup(group.id);
+    if (isSimulatorMode) {
+      await toggleSimulatorMode(group, true);
+    }
     _glog('createGroup DONE: activeGroup=${state.activeGroup?.name}, members=${state.members.length}');
   }
 
@@ -199,51 +206,75 @@ class GroupNotifier extends StateNotifier<GroupState> {
 
     _glog('_generateAgentReplies: ${sorted.length} present members, reply order: ${sorted.map((m) => m.agentId.substring(0, 6)).join(" -> ")}');
 
-    int idx = 0;
-    for (final member in sorted) {
+    final baseShortTerm = await _groupService.getShortTerm(groupId);
+    _glog('  base shortTerm rounds: ${baseShortTerm.length}');
+
+    final accumulatedContext = <Map<String, dynamic>>[];
+    accumulatedContext.addAll(baseShortTerm.map((m) {
+      var role = m['role'] as String;
+      if (role == 'agent') role = 'assistant';
+      return {'role': role, 'content': m['content'] as String, 'sender_name': m['sender_name']};
+    }));
+
+    final List<GroupMessage> replies = [];
+
+    for (int idx = 0; idx < sorted.length; idx++) {
       if (_userInterrupted) {
         _glog('User interrupted at agent $idx/${sorted.length}, stopping');
-        state = state.copyWith(isLoading: false);
-        return;
+        break;
       }
 
+      final member = sorted[idx];
       final agent = await DatabaseService.getAgent(member.agentId);
       if (agent == null) {
         _glog('  SKIP idx=$idx: agent not found for ${member.agentId}');
-        idx++;
         continue;
       }
 
       _glog('  [${idx + 1}/${sorted.length}] Generating reply for ${agent.name} (${member.role})');
-      await _generateSingleAgentReply(groupId, member, agent);
 
-      // Yield to Flutter so the UI rebuilds with the latest message before next agent
-      await Future.delayed(const Duration(milliseconds: 50));
-      idx++;
+      final reply = await _generateSingleAgentReply(
+        groupId, member, agent,
+        previousMessages: accumulatedContext,
+      );
+
+      if (reply != null) {
+        replies.add(reply);
+        accumulatedContext.add({
+          'role': 'assistant',
+          'content': reply.content,
+          'sender_name': agent.name,
+        });
+        _glog('    REPLY: "${reply.content.length > 60 ? '${reply.content.substring(0, 60)}...' : reply.content}"');
+      }
     }
 
-    if (_userInterrupted) {
-      _glog('Interrupted during agent loop');
+    if (!_userInterrupted) {
+      _glog('All ${sorted.length} agents processed, ${replies.length} replies');
+    }
+
+    if (replies.isNotEmpty) {
+      state = state.copyWith(messages: [...state.messages, ...replies], isLoading: false);
     } else {
-      _glog('All ${sorted.length} agents replied successfully');
+      state = state.copyWith(isLoading: false);
     }
-    state = state.copyWith(isLoading: false);
   }
 
-  Future<void> _generateSingleAgentReply(
-      String groupId, GroupMember member, Agent agent) async {
+  Future<GroupMessage?> _generateSingleAgentReply(
+      String groupId, GroupMember member, Agent agent,
+      {List<Map<String, dynamic>>? previousMessages}) async {
     _glog('    _generateSingleAgentReply: agent=${agent.name} groupId=$groupId');
     final settings = _ref.read(settingsProvider);
     final provider = settings.activeProvider;
     if (provider == null) {
       _glog('    SKIP: no active provider');
-      return;
+      return null;
     }
 
     final group = await _groupService.getGroup(groupId);
     if (group == null) {
       _glog('    SKIP: group not found');
-      return;
+      return null;
     }
 
     final persona = agent.persona
@@ -267,17 +298,16 @@ class GroupNotifier extends StateNotifier<GroupState> {
 
     final tools = ApiService.getToolDefinitions(isGroupChat: true);
 
-    final shortTerm = await _groupService.getShortTerm(groupId);
-    _glog('    shortTerm rounds: ${shortTerm.length}');
-
     final apiMessages = <Map<String, dynamic>>[
       {'role': 'system', 'content': systemContent},
-      ...shortTerm.map((m) {
-            var role = m['role'] as String;
-            if (role == 'agent') role = 'assistant';
-            return {'role': role, 'content': m['content'] as String};
-          }),
+      ...(previousMessages ?? []).map((m) => {
+        'role': m['role'] as String,
+        'content': m['content'] as String,
+        'name': m['sender_name'],
+      }),
     ];
+
+    _glog('    context msgs: ${apiMessages.length}');
 
     final apiService = ApiService.fromConfig(
       model: settings.effectiveModel,
@@ -305,17 +335,18 @@ class GroupNotifier extends StateNotifier<GroupState> {
           agentName: agent.name,
           content: result,
         );
-        final updatedMessages = [...state.messages, agentMsg];
-        state = state.copyWith(messages: updatedMessages);
-        _glog('    REPLY stored: "${result.length > 60 ? '${result.substring(0, 60)}...' : result}"');
+        return agentMsg;
       } else {
         _glog('    No reply generated');
+        return null;
       }
     } on ApiException catch (e) {
       _glog('    ApiException: $e');
       _addErrorToChat(groupId, agent.name, 'API error: $e');
+      return null;
     } catch (e) {
       _glog('    Unexpected error: $e');
+      return null;
     }
   }
 
@@ -412,6 +443,71 @@ class GroupNotifier extends StateNotifier<GroupState> {
 
   void interruptAgents() {
     _userInterrupted = true;
+  }
+
+  // ═══ Simulator Mode ═══
+
+  static const String _narratorPersonaTemplate = '''你是本群聊的旁白/叙述者。使用第三人称中性叙述。
+
+世界观设定：{{WORLD_SETTING}}
+
+你的职责：
+1. 在场景切换、重要事件发生时描述环境、氛围、时间推移
+2. 推动剧情，引入冲突和转折
+3. 需要新角色时用 manage_character 工具创建
+4. 角色离开/死亡/不再有用时用 manage_character 工具移除
+5. 用 chatgroup 工具输出你的叙述
+6. 不要每轮都发言——只在剧情出现转折、新场景开始、或需要引入新角色时才发言
+7. 叙述应生动沉浸，像小说一样，每次发言都是一段精炼的叙述文''';
+
+  Future<void> toggleSimulatorMode(GroupChat group, bool enabled) async {
+    if (enabled) {
+      final narrator = Agent(
+        name: '旁白',
+        gender: '其他',
+        description: '群聊旁白叙述者',
+        persona: _narratorPersonaTemplate.replaceAll('{{WORLD_SETTING}}', group.worldSetting ?? '（未设定）'),
+        sourceGroupId: group.id,
+        isSimCharacter: true,
+        isActive: true,
+      );
+      await DatabaseService.insertAgent(narrator);
+
+      final member = GroupMember(
+        agentId: narrator.id, groupId: group.id, role: 'moderator',
+        joinedAt: DateTime.now().millisecondsSinceEpoch,
+      );
+      await DatabaseService.insertGroupMember(member);
+
+      await _groupService.updateGroup(group.copyWith(isSimulatorMode: true, updatedAt: DateTime.now().millisecondsSinceEpoch));
+      if (state.activeGroup?.id == group.id) {
+        state = state.copyWith(activeGroup: state.activeGroup!.copyWith(isSimulatorMode: true));
+        await loadGroup(group.id);
+      }
+    } else {
+      final members = await _groupService.getMembers(group.id);
+      for (final m in members) {
+        try {
+          final agent = await DatabaseService.getAgent(m.agentId);
+          if (agent != null && agent.isSimCharacter && agent.sourceGroupId == group.id) {
+            await DatabaseService.deleteGroupMember(m.id!);
+            await DatabaseService.deleteAgent(agent.id);
+          }
+        } catch (_) {}
+      }
+      await _groupService.updateGroup(group.copyWith(isSimulatorMode: false, worldSetting: null, updatedAt: DateTime.now().millisecondsSinceEpoch));
+      if (state.activeGroup?.id == group.id) {
+        state = state.copyWith(activeGroup: state.activeGroup!.copyWith(isSimulatorMode: false, worldSetting: null));
+        await loadGroup(group.id);
+      }
+    }
+  }
+
+  Future<void> updateWorldSetting(GroupChat group, String setting) async {
+    await _groupService.updateGroup(group.copyWith(worldSetting: setting, updatedAt: DateTime.now().millisecondsSinceEpoch));
+    if (state.activeGroup?.id == group.id) {
+      state = state.copyWith(activeGroup: state.activeGroup!.copyWith(worldSetting: setting));
+    }
   }
 
   bool get userInterrupted => _userInterrupted;

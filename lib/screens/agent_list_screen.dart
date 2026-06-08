@@ -15,7 +15,7 @@ class AgentListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(agentProvider);
-    final agents = state.agents;
+    final agents = state.agents.where((a) => !a.isSimCharacter).toList();
     final l10n = AppLocalizations.of(context);
 
     return Scaffold(

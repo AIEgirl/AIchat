@@ -20,6 +20,7 @@ import 'memory_screen.dart';
 import 'plugin_screen.dart';
 import 'chat_screen.dart';
 import 'agent_create_screen.dart';
+import 'novel_history_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -404,6 +405,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _listTileRow(Icons.bug_report, l10n.get('debugLogs'), l10n.get('debugLogsDesc'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DebugLogScreen()))),
         const Divider(height: 1),
         _listTileRow(Icons.extension, l10n.get('pluginManagement'), l10n.get('pluginManagementDesc'), () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PluginScreen()))),
+        const Divider(height: 1),
+        _listTileRow(Icons.auto_awesome, '小说生成', '查看和管理生成的小说内容', () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NovelHistoryScreen()))),
         const Divider(height: 1),
         const SizedBox(height: 8),
         OutlinedButton.icon(

@@ -11,6 +11,8 @@ class Agent {
   final String? avatarPath;
   final String? chatBackground;
   final bool isActive;
+  final String? sourceGroupId;
+  final bool isSimCharacter;
   final int createdAt;
   final int updatedAt;
 
@@ -25,6 +27,8 @@ class Agent {
     this.avatarPath,
     this.chatBackground,
     this.isActive = false,
+    this.sourceGroupId,
+    this.isSimCharacter = false,
     int? createdAt,
     int? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -35,7 +39,8 @@ class Agent {
     String? id, String? name, String? gender, String? description, String? persona,
     String? openingLine, bool clearOpeningLine = false,
     int? avatarColor, String? avatarPath, String? chatBackground,
-    bool? isActive, int? createdAt, int? updatedAt,
+    bool? isActive, String? sourceGroupId, bool? isSimCharacter,
+    int? createdAt, int? updatedAt,
   }) {
     return Agent(
       id: id ?? this.id, name: name ?? this.name, gender: gender ?? this.gender,
@@ -44,6 +49,8 @@ class Agent {
       avatarColor: avatarColor ?? this.avatarColor, avatarPath: avatarPath ?? this.avatarPath,
       chatBackground: chatBackground ?? this.chatBackground,
       isActive: isActive ?? this.isActive,
+      sourceGroupId: sourceGroupId ?? this.sourceGroupId,
+      isSimCharacter: isSimCharacter ?? this.isSimCharacter,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now().millisecondsSinceEpoch,
     );
@@ -54,7 +61,10 @@ class Agent {
     'persona': persona, 'opening_line': openingLine,
     'avatar_color': avatarColor,
     'avatar_path': avatarPath, 'chat_background': chatBackground,
-    'is_active': isActive ? 1 : 0, 'created_at': createdAt, 'updated_at': updatedAt,
+    'is_active': isActive ? 1 : 0,
+    'source_group_id': sourceGroupId,
+    'is_sim_character': isSimCharacter ? 1 : 0,
+    'created_at': createdAt, 'updated_at': updatedAt,
   };
 
   factory Agent.fromMap(Map<String, dynamic> map) => Agent(
@@ -65,6 +75,8 @@ class Agent {
     avatarPath: map['avatar_path'] as String?,
     chatBackground: map['chat_background'] as String?,
     isActive: (map['is_active'] as int?) == 1,
+    sourceGroupId: map['source_group_id'] as String?,
+    isSimCharacter: (map['is_sim_character'] as int?) == 1,
     createdAt: map['created_at'] as int, updatedAt: map['updated_at'] as int,
   );
 }

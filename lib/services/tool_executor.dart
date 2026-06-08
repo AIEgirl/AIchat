@@ -1,9 +1,12 @@
 import 'memory_service.dart';
 import 'plan_service.dart';
 import 'group_service.dart';
+import 'database_service.dart';
 import '../models/long_term_memory.dart';
 import '../models/base_memory.dart';
 import '../models/group_shared_memory.dart';
+import '../models/agent.dart';
+import '../models/group_member.dart';
 import 'package:flutter/foundation.dart';
 
 void _tlog(String msg) {
@@ -14,9 +17,10 @@ class ToolExecutor {
   final MemoryService memoryService;
   final PlanService planService;
   final GroupService? groupService;
+  final VoidCallback? onAgentsChanged;
   final List<ToolExecutionLog> executionLogs = [];
 
-  ToolExecutor({required this.memoryService, required this.planService, this.groupService});
+  ToolExecutor({required this.memoryService, required this.planService, this.groupService, this.onAgentsChanged});
 
   Future<String> execute(String toolName, Map<String, dynamic> arguments) async {
     String result;
@@ -37,6 +41,9 @@ class ToolExecutor {
         break;
       case 'plan':
         result = await _handlePlan(arguments);
+        break;
+      case 'manage_character':
+        result = await _handleManageCharacter(arguments);
         break;
       default:
         result = '未知工具: $toolName';
@@ -200,6 +207,53 @@ class ToolExecutor {
     } catch (e) {
       return '计划失败: $e';
     }
+  }
+
+  Future<String> _handleManageCharacter(Map<String, dynamic> args) async {
+    final action = args['action'] as String? ?? '';
+    final name = args['name'] as String? ?? '';
+
+    if (action == 'add') {
+      final gender = args['gender'] as String? ?? '其他';
+      final description = args['description'] as String? ?? '';
+      final persona = args['persona'] as String? ?? '';
+      if (persona.isEmpty) return '错误: add 操作需要 persona';
+
+      final gid = groupService?.activeGroupId;
+      if (gid == null || gid.isEmpty) return '错误: 未在群聊上下文中';
+
+      final agent = Agent(
+        name: name,
+        gender: gender,
+        description: description,
+        persona: persona,
+        sourceGroupId: gid,
+        isSimCharacter: true,
+        isActive: true,
+      );
+      await DatabaseService.insertAgent(agent);
+      final member = GroupMember(agentId: agent.id, groupId: gid, role: 'member', joinedAt: DateTime.now().millisecondsSinceEpoch);
+      await DatabaseService.insertGroupMember(member);
+      onAgentsChanged?.call();
+      return '已创建角色 "$name" 并加入群聊';
+    } else if (action == 'remove') {
+      final target = args['target'] as String? ?? name;
+      final gid = groupService?.activeGroupId;
+      if (gid == null || gid.isEmpty) return '错误: 未在群聊上下文中';
+
+      final members = await DatabaseService.getGroupMembers(gid);
+      for (final m in members) {
+        final agent = await DatabaseService.getAgent(m.agentId);
+        if (agent != null && agent.isSimCharacter && (agent.name == target || agent.id == target)) {
+          await DatabaseService.deleteGroupMember(m.id!);
+          await DatabaseService.deleteAgent(agent.id);
+          onAgentsChanged?.call();
+          return '已移除角色 "$target"';
+        }
+      }
+      return '未找到角色 "$target"';
+    }
+    return '错误: 无效的 action';
   }
 }
 

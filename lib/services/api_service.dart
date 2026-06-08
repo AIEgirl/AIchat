@@ -336,6 +336,7 @@ class ApiService {
       _forgetGroupTool(),
       _chatgroupTool(),
       _planGroupTool(),
+      _manageCharacterTool(),
     ];
   }
 
@@ -482,6 +483,28 @@ class ApiService {
             'message': {'type': 'string', 'description': '到时间后要在群聊中发送的消息内容。'},
           },
           'required': ['send_time', 'message'],
+        },
+      },
+    };
+  }
+
+  static Map<String, dynamic> _manageCharacterTool() {
+    return {
+      'type': 'function',
+      'function': {
+        'name': 'manage_character',
+        'description': '在群聊中创建或移除一个角色。add 时创建新角色并加入群聊，remove 时删除角色。',
+        'parameters': {
+          'type': 'object',
+          'properties': {
+            'action': {'type': 'string', 'enum': ['add', 'remove'], 'description': 'add 添加角色，remove 移除角色。'},
+            'name': {'type': 'string', 'description': '角色名称。'},
+            'gender': {'type': 'string', 'enum': ['男', '女', '其他'], 'description': '角色性别，add 时必填。'},
+            'description': {'type': 'string', 'description': '角色一句话描述。'},
+            'persona': {'type': 'string', 'description': '角色完整人设描述，add 时必填。'},
+            'target': {'type': 'string', 'description': '要移除的角色名称或 ID，remove 时必填。'},
+          },
+          'required': ['action', 'name'],
         },
       },
     };

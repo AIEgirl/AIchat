@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart' as pp;
+import 'package:screenshot/screenshot.dart';
 import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/database_service.dart';
+import '../services/novel_service.dart';
 import '../services/plugin_manager.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
@@ -37,8 +38,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   int _sendTrigger = 0;
-  File? _pendingImage;
   final FocusNode _inputFocus = FocusNode();
+  bool _multiSelectMode = false;
+  final Set<int> _selectedIndices = {};
+  final GlobalKey _chatListKey = GlobalKey();
+  final ScreenshotController _screenshotController = ScreenshotController();
 
   String? _lastAgentId;
 
@@ -89,64 +93,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _sendMessageOrImage() {
-    if (_pendingImage != null) {
-      ref
-          .read(chatProvider.notifier)
-          .sendImageMessage(_pendingImage!, _controller.text.trim());
-      _controller.clear();
-      setState(() => _pendingImage = null);
-      _sendTrigger++;
-      _inputFocus.unfocus();
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _scrollToBottom());
-    } else {
-      _sendMessage();
-    }
-  }
-
-  void _showAttachmentOptions() {
-    final l10n = AppLocalizations.of(context);
-    showModalBottomSheet(
-        context: context,
-        shape: const RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(16))),
-        builder: (ctx) => SafeArea(
-                child: Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                        leading: const Icon(Icons.photo_library),
-                        title: Text(l10n.get('album')),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          _pickImage(ImageSource.gallery);
-                        }),
-                    ListTile(
-                        leading: const Icon(Icons.camera_alt),
-                        title: Text(l10n.get('takePhoto')),
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          _pickImage(ImageSource.camera);
-                        }),
-                  ]),
-            )));
-  }
-
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      final picker = ImagePicker();
-      final img =
-          await picker.pickImage(source: source, maxWidth: 2048);
-      if (img != null) setState(() => _pendingImage = File(img.path));
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
-      }
-    }
+    _sendMessage();
   }
 
   void _scrollToBottom() {
@@ -225,22 +172,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       drawer: _buildDrawerMobile(),
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        leading: Builder(
-            builder: (ctx) => IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () => Scaffold.of(ctx).openDrawer())),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(appTitle,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w600)),
-            Text(model.isNotEmpty ? model : l10n.get('noModel'),
-                style: TextStyle(
-                    fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          ],
-        ),
-        actions: [
+        leading: _multiSelectMode
+            ? IconButton(icon: const Icon(Icons.close), onPressed: _exitMultiSelect)
+            : Builder(
+                builder: (ctx) => IconButton(
+                    icon: const Icon(Icons.menu),
+                    onPressed: () => Scaffold.of(ctx).openDrawer())),
+        title: _multiSelectMode
+            ? Text('已选 ${_selectedIndices.length} 条', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(appTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  Text(model.isNotEmpty ? model : l10n.get('noModel'), style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                ],
+              ),
+        actions: _multiSelectMode ? null : [
           Padding(
             padding: const EdgeInsets.only(right: 4),
             child: Row(
@@ -298,18 +245,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(appTitle,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w600)),
-            Text(model.isNotEmpty ? model : l10n.get('noModel'),
-                style: TextStyle(
-                    fontSize: 12, color: scheme.onSurfaceVariant)),
-          ],
-        ),
-        actions: [
+        title: _multiSelectMode
+            ? Text('已选 ${_selectedIndices.length} 条', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600))
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(appTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  Text(model.isNotEmpty ? model : l10n.get('noModel'), style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                ],
+              ),
+        actions: _multiSelectMode ? null : [
           Padding(
             padding: const EdgeInsets.only(right: 4),
             child: Row(
@@ -387,7 +332,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
               ),
             ),
-            for (final a in agents)
+            for (final a in agents.where((a) => !a.isSimCharacter))
               _agentListTile(a, current, l10n),
             const Divider(indent: 16, endIndent: 16),
             if (groups.isNotEmpty) ...[
@@ -598,6 +543,122 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ));
   }
 
+  void _toggleSelect(int index) => setState(() {
+    if (_selectedIndices.contains(index)) {
+      _selectedIndices.remove(index);
+      if (_selectedIndices.isEmpty) _multiSelectMode = false;
+    } else {
+      _selectedIndices.add(index);
+    }
+  });
+
+  void _enterMultiSelect(int index) => setState(() {
+    _multiSelectMode = true;
+    _selectedIndices.add(index);
+  });
+
+  void _exitMultiSelect() => setState(() {
+    _multiSelectMode = false;
+    _selectedIndices.clear();
+  });
+
+  void _showWechatPopup(BuildContext context, int index) {
+    final chatState = ref.read(chatProvider);
+    if (index >= chatState.messages.length) return;
+    final msg = chatState.messages[index];
+    final l10n = AppLocalizations.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    showMenu(
+      context: context,
+      color: scheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      position: const RelativeRect.fromLTRB(80, 300, 80, 300),
+      items: [
+        PopupMenuItem(
+          child: ListTile(dense: true, leading: const Icon(Icons.copy, size: 20), title: Text(l10n.get('copyText'))),
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: msg.content));
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.get('copied')), duration: const Duration(seconds: 1)));
+          },
+        ),
+        PopupMenuItem(
+          child: ListTile(dense: true, leading: const Icon(Icons.checklist, size: 20), title: Text('多选')),
+          onTap: () => _enterMultiSelect(index),
+        ),
+        if (!msg.isUser) ...[
+          PopupMenuItem(
+            child: ListTile(dense: true, leading: const Icon(Icons.refresh, size: 20), title: Text(l10n.get('regenerate'))),
+            onTap: () => ref.read(chatProvider.notifier).regenerateMessage(index),
+          ),
+          if (msg.toolLogs != null)
+            PopupMenuItem(
+              child: ListTile(dense: true, leading: const Icon(Icons.code, size: 20), title: Text(l10n.get('viewToolCalls'))),
+              onTap: () {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _showToolLogsForMessage(context, msg);
+                });
+              },
+            ),
+        ],
+        PopupMenuItem(
+          child: ListTile(dense: true, leading: Icon(Icons.delete, size: 20, color: scheme.error), title: Text(l10n.get('deleteMessage'), style: TextStyle(color: scheme.error))),
+          onTap: () => _onDeleteMessage(msg),
+        ),
+      ],
+    );
+  }
+
+  void _showToolLogsForMessage(BuildContext context, ChatMessage msg) {
+    if (msg.toolLogs == null) return;
+    final l10n = AppLocalizations.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(l10n.get('toolCalls'), style: const TextStyle(fontWeight: FontWeight.w600)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (msg.promptTokens != null || msg.completionTokens != null)
+              Container(
+                width: double.infinity, margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(8)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(l10n.get('tokenUsage'), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 4),
+                  if (msg.promptTokens != null) Text('${l10n.get("promptTokens")}: ${msg.promptTokens}', style: const TextStyle(fontSize: 12)),
+                  if (msg.completionTokens != null) Text('${l10n.get("completionTokens")}: ${msg.completionTokens}', style: const TextStyle(fontSize: 12)),
+                ]),
+              ),
+            Flexible(child: ListView.builder(
+              shrinkWrap: true, itemCount: msg.toolLogs!.length,
+              itemBuilder: (_, i) {
+                final log = msg.toolLogs![i];
+                final formattedArgs = const JsonEncoder.withIndent('  ').convert(log.arguments);
+                return Card(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  child: Padding(padding: const EdgeInsets.all(10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('${l10n.get('tool')}: ${log.toolName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text('Args:', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    Container(width: double.infinity, margin: const EdgeInsets.only(top: 2, bottom: 4), padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(6)),
+                      child: Text(formattedArgs, style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+                    ),
+                    Text('Result: ${log.result}', style: const TextStyle(fontSize: 13)),
+                  ])),
+                );
+              },
+            )),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l10n.get('close')))],
+      ),
+    );
+  }
+
   Future<void> _switchAgent(Agent a, Agent? current) async {
     if (a.id == current?.id) return;
     await ref.read(agentProvider.notifier).setActiveAgent(a.id);
@@ -627,7 +688,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       Widget body = Column(children: [
         Expanded(
           key: ValueKey('chat_list_$agentId'),
-          child: chatState.messages.isEmpty && !chatState.isLoading
+          child: Screenshot(
+            controller: _screenshotController,
+            child: chatState.messages.isEmpty && !chatState.isLoading
               ? _buildEmptyState()
               : ListView.builder(
                   controller: _scrollController,
@@ -635,24 +698,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       horizontal: 8, vertical: 8),
                   itemCount: chatState.messages.length,
                   itemBuilder: (context, index) {
+                    final msg = chatState.messages[index];
+                    final isSelected = _selectedIndices.contains(index);
                     return _AnimatedBubble(
                       key: ValueKey(
-                          chatState.messages[index].dbId ??
-                              chatState.messages[index].timestamp
-                                  .millisecondsSinceEpoch),
-                      message: chatState.messages[index],
-                      onDelete: () =>
-                          _onDeleteMessage(chatState.messages[index]),
-                      onRegenerate: !chatState.messages[index].isUser
-                          ? () {
-                              ref
-                                  .read(chatProvider.notifier)
-                                  .regenerateMessage(index);
-                            }
+                          msg.dbId ?? msg.timestamp.millisecondsSinceEpoch),
+                      message: msg,
+                      onDelete: () => _onDeleteMessage(msg),
+                      onRegenerate: !msg.isUser
+                          ? () { ref.read(chatProvider.notifier).regenerateMessage(index); }
                           : null,
+                      showCheckbox: _multiSelectMode,
+                      isSelected: isSelected,
+                      onTap: _multiSelectMode
+                          ? () => _toggleSelect(index)
+                          : () => _showWechatPopup(context, index),
+                      onLongPress: () => _enterMultiSelect(index),
                     );
                   },
                 ),
+              ),
         ),
         if (chatState.isLoading) const BouncingDotsIndicator(),
         if (chatState.error != null)
@@ -664,6 +729,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     color: Theme.of(context).colorScheme.error, fontSize: 12)),
           ),
         _buildPluginButtons(),
+        if (_multiSelectMode)
+          _buildMultiSelectBar(),
         _buildInputArea(),
       ]);
       if (bg != null) {
@@ -724,7 +791,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   child: Text(l10n.get('createNewAgent'), style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
                 ),
               ),
-              for (final a in agents)
+              for (final a in agents.where((a) => !a.isSimCharacter))
                 ListTile(
                   dense: true,
                   leading: _agentAvatar(a, radius: 18, fontSize: 14),
@@ -872,6 +939,179 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  Widget _buildMultiSelectBar() {
+    final scheme = Theme.of(context).colorScheme;
+    final chatState = ref.watch(chatProvider);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.3))),
+      ),
+      child: Row(children: [
+        TextButton.icon(
+          onPressed: _exitMultiSelect,
+          icon: const Icon(Icons.close, size: 18),
+          label: Text('$_selectedIndicesCount 条'),
+        ),
+        const Spacer(),
+        IconButton(tooltip: '截图', icon: const Icon(Icons.screenshot_monitor, size: 20), onPressed: _screenshotSelected),
+        IconButton(tooltip: '复制', icon: const Icon(Icons.copy, size: 20), onPressed: _copySelected),
+        IconButton(tooltip: 'AI 润色', icon: const Icon(Icons.auto_awesome, size: 20), onPressed: () => _aiPolishSelected(context)),
+        IconButton(tooltip: '删除', icon: Icon(Icons.delete, size: 20, color: scheme.error), onPressed: _deleteSelected),
+      ]),
+    );
+  }
+
+  int get _selectedIndicesCount => _selectedIndices.length;
+
+  void _copySelected() {
+    final chatState = ref.read(chatProvider);
+    final buffer = StringBuffer();
+    for (final idx in _selectedIndices.toList()..sort()) {
+      if (idx < chatState.messages.length) {
+        buffer.writeln(chatState.messages[idx].content);
+        buffer.writeln();
+      }
+    }
+    Clipboard.setData(ClipboardData(text: buffer.toString()));
+    _exitMultiSelect();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已复制 $_selectedIndicesCount 条消息'), duration: const Duration(seconds: 1)));
+  }
+
+  Future<void> _screenshotSelected() async {
+    try {
+      final imageBytes = await _screenshotController.capture();
+      if (imageBytes == null || !mounted) return;
+      final dir = await pp.getApplicationDocumentsDirectory();
+      final path = '${dir.path}/screenshot_${DateTime.now().millisecondsSinceEpoch}.png';
+      final file = File(path);
+      await file.writeAsBytes(imageBytes);
+      _exitMultiSelect();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('截图已保存: $path'), duration: const Duration(seconds: 2)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('截图失败: $e'), backgroundColor: Theme.of(context).colorScheme.error));
+      }
+    }
+  }
+
+  void _deleteSelected() {
+    final chatState = ref.read(chatProvider);
+    final sorted = _selectedIndices.toList()..sort((a, b) => b.compareTo(a));
+    for (final idx in sorted) {
+      if (idx < chatState.messages.length) {
+        ref.read(chatProvider.notifier).deleteMessage(chatState.messages[idx]);
+      }
+    }
+    _exitMultiSelect();
+  }
+
+  void _aiPolishSelected(BuildContext context) async {
+    final chatState = ref.read(chatProvider);
+    final buffer = StringBuffer();
+    final sorted = _selectedIndices.toList()..sort();
+    for (final idx in sorted) {
+      if (idx < chatState.messages.length) {
+        final msg = chatState.messages[idx];
+        buffer.writeln('${msg.isUser ? 'User' : 'AI'}: ${msg.content}');
+      }
+    }
+    final text = buffer.toString();
+    if (text.trim().isEmpty) return;
+    _exitMultiSelect();
+
+    final l10n = AppLocalizations.of(context);
+    String style = NovelService.defaultStyles.first;
+    int wordCount = NovelService.defaultWordCount;
+    final customCtrl = TextEditingController();
+    String? result;
+    bool loading = false;
+
+    if (!context.mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialogState) => AlertDialog(
+        title: Text('AI 小说生成', style: const TextStyle(fontWeight: FontWeight.w600)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('选中消息:', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 4),
+              Container(
+                width: double.infinity, padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)),
+                constraints: const BoxConstraints(maxHeight: 120),
+                child: SingleChildScrollView(child: Text(text, style: const TextStyle(fontSize: 12))),
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: DropdownButtonFormField<String>(
+                  value: style,
+                  decoration: const InputDecoration(labelText: '风格', border: OutlineInputBorder(), isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8)),
+                  items: NovelService.defaultStyles.map((s) => DropdownMenuItem(value: s, child: Text(s, style: const TextStyle(fontSize: 13)))).toList(),
+                  onChanged: (v) { if (v != null) setDialogState(() => style = v); },
+                )),
+                const SizedBox(width: 12),
+                SizedBox(width: 100, child: TextField(
+                  controller: TextEditingController(text: wordCount.toString()),
+                  decoration: const InputDecoration(labelText: '字数', border: OutlineInputBorder(), isDense: true),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) { final w = int.tryParse(v); if (w != null && w > 0) setDialogState(() => wordCount = w); },
+                )),
+              ]),
+              const SizedBox(height: 12),
+              TextField(
+                controller: customCtrl,
+                maxLines: 3,
+                decoration: InputDecoration(labelText: '自定义提示词（可选）', hintText: '例如：以第三人称视角，加入悬疑元素...', border: const OutlineInputBorder()),
+                style: const TextStyle(fontSize: 12),
+              ),
+              if (result != null) ...[
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                Text('生成结果:', style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                const SizedBox(height: 4),
+                Container(
+                  width: double.infinity, padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(8)),
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  child: SingleChildScrollView(child: SelectableText(result!, style: const TextStyle(fontSize: 14, height: 1.6))),
+                ),
+              ],
+              if (loading) const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: CircularProgressIndicator())),
+            ]),
+          ),
+        ),
+        actions: [
+          if (result != null) ...[
+            TextButton(onPressed: () { Clipboard.setData(ClipboardData(text: result!)); Navigator.pop(ctx); }, child: const Text('复制结果')),
+            TextButton(onPressed: () async {
+              await NovelService.save(style: style, wordCount: wordCount, prompt: text, result: result!);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已保存'), duration: Duration(seconds: 1)));
+            }, child: const Text('保存')),
+          ],
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(l10n.get(loading ? 'cancel' : 'close'))),
+          if (!loading) FilledButton(onPressed: () async {
+            setDialogState(() => loading = true);
+            final settings = ref.read(settingsProvider);
+            final r = await NovelService.generate(
+              content: text, style: style, wordCount: wordCount,
+              customPrompt: customCtrl.text.trim(),
+              baseUrl: settings.effectiveBaseUrl, apiKey: settings.effectiveApiKey, model: settings.effectiveModel,
+            );
+            setDialogState(() { result = r; loading = false; });
+          }, child: const Text('生成')),
+        ],
+      )),
+    );
+  }
+
   Widget _buildInputArea() {
     final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
@@ -885,25 +1125,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       child: SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (_pendingImage != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              height: 80,
-              child: Stack(children: [
-                ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.file(_pendingImage!,
-                        fit: BoxFit.cover)),
-                Positioned(
-                    top: 0, right: 0,
-                    child: IconButton(
-                        icon: const Icon(Icons.close, size: 18, color: Colors.white),
-                        style: IconButton.styleFrom(
-                            backgroundColor: Colors.black.withValues(alpha: 0.5),
-                            minimumSize: const Size(20, 20)),
-                        onPressed: () => setState(() => _pendingImage = null))),
-              ]),
-            ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             decoration: BoxDecoration(
@@ -919,12 +1140,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ],
             ),
             child: Row(children: [
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline, size: 26),
-                onPressed: _showAttachmentOptions,
-                tooltip: l10n.get('attachmentMenu'),
-                splashRadius: 20,
-              ),
               Expanded(
                 child: CallbackShortcuts(
                   bindings: {
@@ -1014,12 +1229,20 @@ class _AnimatedBubble extends StatefulWidget {
   final ChatMessage message;
   final VoidCallback onDelete;
   final VoidCallback? onRegenerate;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool showCheckbox;
+  final bool isSelected;
 
   const _AnimatedBubble(
       {super.key,
       required this.message,
       required this.onDelete,
-      this.onRegenerate});
+      this.onRegenerate,
+      this.onTap,
+      this.onLongPress,
+      this.showCheckbox = false,
+      this.isSelected = false});
 
   @override
   State<_AnimatedBubble> createState() => _AnimatedBubbleState();
@@ -1082,9 +1305,18 @@ class _AnimatedBubbleState extends State<_AnimatedBubble>
                     ? MainAxisAlignment.end
                     : MainAxisAlignment.start,
                 children: [
-                  if (!isUser)
+                  if (widget.showCheckbox)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Icon(
+                        widget.isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+                        color: widget.isSelected ? scheme.primary : scheme.onSurfaceVariant,
+                        size: 24,
+                      ),
+                    ),
+                  if (!isUser && !widget.showCheckbox)
                     _agentAvatarSmall(agentState.currentAgent),
-                  if (!isUser) const SizedBox(width: 8),
+                  if (!isUser && !widget.showCheckbox) const SizedBox(width: 8),
                   Flexible(
                     child: MouseRegion(
                       onEnter: (_) =>
@@ -1092,7 +1324,12 @@ class _AnimatedBubbleState extends State<_AnimatedBubble>
                       onExit: (_) =>
                           setState(() => _isHovered = false),
                       child: GestureDetector(
-                        onTap: () => _showActionBar(context),
+                        onTap: widget.showCheckbox
+                            ? (widget.onTap ?? widget.onDelete)
+                            : (widget.onTap ?? () => _showActionBar(context)),
+                        onLongPress: widget.showCheckbox
+                            ? null
+                            : (widget.onLongPress ?? () => _showActionBar(context)),
                         onSecondaryTapDown:
                             ResponsiveLayout.isDesktop(context)
                                 ? (d) =>

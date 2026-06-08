@@ -6,6 +6,7 @@ import 'services/notification_service.dart';
 import 'services/database_service.dart';
 import 'services/locale_service.dart';
 import 'services/plugin_manager.dart';
+import 'services/update_service.dart';
 import 'providers/chat_provider.dart';
 import 'providers/agent_provider.dart';
 import 'providers/settings_provider.dart';
@@ -102,6 +103,10 @@ class _AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final agentState = ref.watch(agentProvider);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) UpdateService.checkUpdate(context);
+    });
 
     if (agentState.agents.isEmpty) {
       return const OnboardingScreen();

@@ -19,11 +19,13 @@ class _GroupManageScreenState extends ConsumerState<GroupManageScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(agentProvider.notifier).refresh();
       ref.read(groupProvider.notifier).loadGroup(widget.groupId);
     });
   }
 
   void _refresh() {
+    ref.read(agentProvider.notifier).refresh();
     ref.read(groupProvider.notifier).loadGroup(widget.groupId);
   }
 

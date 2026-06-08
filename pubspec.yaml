@@ -37,6 +37,8 @@ dependencies:
   path: ^1.9.0
   shared_preferences: ^2.3.4
   http: ^1.2.2
+  url_launcher: ^6.3.1
+  screenshot: 3.0.0
   flutter_riverpod: ^2.6.1
   riverpod_annotation: ^2.6.1
   intl: ^0.20.1
@@ -71,6 +73,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/vision.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
 import '../services/memory_service.dart';
@@ -108,6 +106,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
   final MemoryService _memoryService;
   final ToolExecutor _toolExecutor;
   final Ref _ref;
+  String? _lastUserContent;
   Timer? _proactiveCheckTimer;
 
   ChatNotifier(this._ref, this._memoryService, this._toolExecutor)
@@ -214,6 +213,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
   MemoryService get memoryService => _memoryService;
   ToolExecutor get toolExecutor => _toolExecutor;
   String? get _agentId => _ref.read(agentProvider).currentAgent?.id;
+  String? get rollbackContent => _lastUserContent;
 
   void _startProactiveCheck() {
     _proactiveCheckTimer?.cancel();
@@ -620,18 +620,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
       if (result.chatMessage != null && result.chatMessage!.isNotEmpty) {
         _log('AI reply: ${result.chatMessage}');
-        final displayContent = PluginManager.instance.applyOutputMods(result.chatMessage!) ?? result.chatMessage!;
-        final shortAi = _memoryService.addShortTermMessage(role: 'assistant', content: result.chatMessage!);
-        final aiMsg = ChatMessage(
-          role: 'assistant', content: displayContent,
-          toolLogs: result.toolLogs.isNotEmpty ? result.toolLogs : null, shortMemId: shortAi.id,
-          promptTokens: result.promptTokens, completionTokens: result.completionTokens,
-        );
-        _ref.read(settingsProvider.notifier).updateLastInteractionTime(DateTime.now());
-        state = state.copyWith(messages: [...state.messages, aiMsg], isLoading: false, debugMessages: debugMsgs);
-        _saveChatMessageToDb(aiMsg);
+        _deliverAiReply(result, debugMsgs);
       } else {
-        state = state.copyWith(isLoading: false, error: 'API 返回空内容，请检查模型是否正确');
+        await _handleEmptyResponse(apiService, tools, apiMessages, startTime, debugMsgs);
       }
     } on ApiException catch (e) {
       _log('ApiException: $e');
@@ -684,48 +675,82 @@ class ChatNotifier extends StateNotifier<ChatState> {
     }
   }
 
-  Future<void> sendImageMessage(File imageFile, String text) async {
-    if (state.isLoading) return;
+  void _deliverAiReply(_ToolLoopResult result, List<Map<String, dynamic>> debugMsgs) {
+    final displayContent = PluginManager.instance.applyOutputMods(result.chatMessage!) ?? result.chatMessage!;
+    final shortAi = _memoryService.addShortTermMessage(role: 'assistant', content: result.chatMessage!);
+    final aiMsg = ChatMessage(
+      role: 'assistant', content: displayContent,
+      toolLogs: result.toolLogs.isNotEmpty ? result.toolLogs : null, shortMemId: shortAi.id,
+      promptTokens: result.promptTokens, completionTokens: result.completionTokens,
+    );
+    _ref.read(settingsProvider.notifier).updateLastInteractionTime(DateTime.now());
+    state = state.copyWith(messages: [...state.messages, aiMsg], isLoading: false, debugMessages: debugMsgs);
+    _saveChatMessageToDb(aiMsg);
+  }
 
-    _logH1('NEW IMAGE MESSAGE');
-
-    final bytes = await imageFile.readAsBytes();
-    final imageBase64 = base64Encode(bytes);
-
-    final dir = (await getApplicationDocumentsDirectory()).path;
-    final savedPath = '${dir}/img_${DateTime.now().millisecondsSinceEpoch}.jpg';
-    await File(savedPath).writeAsBytes(bytes);
-
-    final displayText = text.isNotEmpty ? text : '[图片]';
-    final displayContent = text.isNotEmpty ? text : '';
-    final shortMsg = _memoryService.addShortTermMessage(role: 'user', content: displayText);
-    final userMsg = ChatMessage(role: 'user', content: displayContent, imagePath: savedPath, shortMemId: shortMsg.id);
-    state = state.copyWith(messages: [...state.messages, userMsg], isLoading: true, error: null);
-    _saveChatMessageToDb(userMsg);
+  Future<void> _handleEmptyResponse(
+    ApiService apiService,
+    List<Map<String, dynamic>> tools,
+    List<Map<String, dynamic>> apiMessages,
+    DateTime startTime,
+    List<Map<String, dynamic>> debugMsgs,
+  ) async {
+    _log('Empty response — retry 1/2...');
+    await Future.delayed(const Duration(seconds: 1));
 
     try {
-      final settings = _ref.read(settingsProvider);
-      final provider = settings.activeProvider;
-      if (provider == null) {
-        state = state.copyWith(isLoading: false, error: '请先配置供应商');
+      final retry1 = await _runToolLoop(
+        apiService: apiService, tools: tools, apiMessages: apiMessages, startTime: DateTime.now(),
+      );
+      if (retry1.chatMessage != null && retry1.chatMessage!.isNotEmpty) {
+        _log('Retry 1 OK');
+        _deliverAiReply(retry1, debugMsgs);
         return;
       }
 
-      final result = await ApiService.visionChat(
-        baseUrl: provider.apiBaseUrl,
-        apiKey: provider.apiKey,
-        model: provider.selectedModel.isNotEmpty ? provider.selectedModel : 'kimi-k2.6',
-        text: text.isNotEmpty ? text : null,
-        imageBase64: imageBase64,
+      _log('Retry 1 empty — checking API...');
+      final settings = _ref.read(settingsProvider);
+      final online = await ApiService.testConnection(
+        baseUrl: settings.effectiveBaseUrl,
+        apiKey: settings.effectiveApiKey,
       );
+      final isOnline = online.startsWith('连接成功');
 
-      final reply = result['content'] as String;
-      final shortAi = _memoryService.addShortTermMessage(role: 'assistant', content: reply);
-      final aiMsg = ChatMessage(role: 'assistant', content: reply, shortMemId: shortAi.id);
-      state = state.copyWith(messages: [...state.messages, aiMsg], isLoading: false);
-      _saveChatMessageToDb(aiMsg);
+      if (isOnline) {
+        _log('API online — retry 2/2...');
+        final retry2 = await _runToolLoop(
+          apiService: apiService, tools: tools, apiMessages: apiMessages, startTime: DateTime.now(),
+        );
+        if (retry2.chatMessage != null && retry2.chatMessage!.isNotEmpty) {
+          _log('Retry 2 OK');
+          _deliverAiReply(retry2, debugMsgs);
+          return;
+        }
+      }
+
+      _rollbackLastUserMessage();
+      state = state.copyWith(isLoading: false, error: isOnline ? '发送失败，请重试' : '网络连接失败');
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: '图片理解失败: $e');
+      _rollbackLastUserMessage();
+      state = state.copyWith(isLoading: false, error: '发送失败: $e');
+    }
+  }
+
+  void _rollbackLastUserMessage() {
+    final msgs = List<ChatMessage>.from(state.messages);
+    for (int i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].isUser) {
+        final removed = msgs.removeAt(i);
+        _lastUserContent = removed.content;
+        if (removed.shortMemId != null) {
+          _memoryService.deleteShortTermMessage(removed.shortMemId!);
+        }
+        if (removed.dbId != null) {
+          DatabaseService.deleteChatMessage(removed.dbId!);
+        }
+        state = state.copyWith(messages: msgs);
+        return;
+      }
     }
   }
 
@@ -914,7 +939,7 @@ final planServiceProvider = Provider<PlanService>((ref) {
 });
 
 final toolExecutorProvider = Provider<ToolExecutor>((ref) {
-  return ToolExecutor(memoryService: ref.read(memoryServiceProvider), planService: ref.read(planServiceProvider));
+  return ToolExecutor(memoryService: ref.read(memoryServiceProvider), planService: ref.read(planServiceProvider), onAgentsChanged: () => ref.read(agentProvider.notifier).refresh());
 });
 
 final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {

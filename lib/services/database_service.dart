@@ -27,7 +27,7 @@ class DatabaseService {
     final path = join(dbPath, 'aichat.db');
     final db = await openDatabase(
       path,
-      version: 14,
+      version: 16,
       onConfigure: (db) async {
         await db.rawQuery('PRAGMA journal_mode=WAL');
       },
@@ -54,6 +54,7 @@ class DatabaseService {
     await db.execute('''CREATE TABLE group_short_term (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL, role TEXT NOT NULL, sender_name TEXT, content TEXT, timestamp INTEGER, FOREIGN KEY (group_id) REFERENCES group_chats(id) ON DELETE CASCADE)''');
     await db.execute('''CREATE TABLE group_shared_memories (id TEXT PRIMARY KEY, group_id TEXT NOT NULL, field TEXT NOT NULL, content TEXT NOT NULL, updated_at INTEGER, FOREIGN KEY (group_id) REFERENCES group_chats(id) ON DELETE CASCADE)''');
     await db.execute('''CREATE TABLE token_cost (id INTEGER PRIMARY KEY AUTOINCREMENT, model TEXT NOT NULL, price REAL NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'per_1000', agent_id TEXT, created_at INTEGER NOT NULL)''');
+    await db.execute('''CREATE TABLE novel_generations (id INTEGER PRIMARY KEY AUTOINCREMENT, style TEXT NOT NULL, word_count INTEGER DEFAULT 500, prompt TEXT NOT NULL, result TEXT NOT NULL, timestamp INTEGER NOT NULL)''');
   }
 
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -120,6 +121,17 @@ class DatabaseService {
         try { await db.delete(table, where: 'agent_id IS NULL OR agent_id = ?', whereArgs: ['']); } catch (_) {}
       }
       debugPrint('[DB] v14 migration: cleaned up records with null/empty agent_id in long_term_memories and base_memories');
+    }
+    if (oldVersion < 15) {
+      try { await db.execute("ALTER TABLE group_chats ADD COLUMN simulator_mode INTEGER DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE group_chats ADD COLUMN world_setting TEXT"); } catch (_) {}
+      try { await db.execute("ALTER TABLE agents ADD COLUMN source_group_id TEXT"); } catch (_) {}
+      try { await db.execute("ALTER TABLE agents ADD COLUMN is_sim_character INTEGER DEFAULT 0"); } catch (_) {}
+      debugPrint('[DB] v15 migration: added simulator mode columns');
+    }
+    if (oldVersion < 16) {
+      await db.execute('''CREATE TABLE IF NOT EXISTS novel_generations (id INTEGER PRIMARY KEY AUTOINCREMENT, style TEXT NOT NULL, word_count INTEGER DEFAULT 500, prompt TEXT NOT NULL, result TEXT NOT NULL, timestamp INTEGER NOT NULL)''');
+      debugPrint('[DB] v16 migration: added novel_generations table');
     }
   }
 
@@ -832,11 +844,41 @@ class DatabaseService {
         try { await db.execute("ALTER TABLE $table ADD COLUMN group_id TEXT"); } catch (_) {}
       }
       try { await db.execute("ALTER TABLE agents ADD COLUMN opening_line TEXT"); } catch (_) {}
+      try { await db.execute("ALTER TABLE agents ADD COLUMN source_group_id TEXT"); } catch (_) {}
+      try { await db.execute("ALTER TABLE agents ADD COLUMN is_sim_character INTEGER DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE group_chats ADD COLUMN simulator_mode INTEGER DEFAULT 0"); } catch (_) {}
+      try { await db.execute("ALTER TABLE group_chats ADD COLUMN world_setting TEXT"); } catch (_) {}
       try { await db.execute("UPDATE group_short_term SET role = 'assistant' WHERE role = 'agent'"); } catch (_) {}
       final result = await db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='group_chats'");
       debugPrint('[DB] group_chats table exists: ${result.isNotEmpty}');
     } catch (e) {
       debugPrint('[DB] _ensureGroupTablesExist error: $e');
     }
+  }
+
+  static Future<int> insertNovelGeneration({
+    required String style,
+    required int wordCount,
+    required String prompt,
+    required String result,
+  }) async {
+    final db = await database;
+    return await db.insert('novel_generations', {
+      'style': style,
+      'word_count': wordCount,
+      'prompt': prompt,
+      'result': result,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  static Future<List<Map<String, dynamic>>> getNovelGenerations() async {
+    final db = await database;
+    return await db.query('novel_generations', orderBy: 'timestamp DESC');
+  }
+
+  static Future<void> deleteNovelGeneration(int id) async {
+    final db = await database;
+    await db.delete('novel_generations', where: 'id = ?', whereArgs: [id]);
   }
 }
