@@ -16,8 +16,13 @@ class UpdateService {
     try {
       final localData = await _loadLocalVision();
       if (localData == null) return;
-      final localSw = localData['Software version'] as int? ?? 0;
-      final localIt = localData['Iteration version'] as int? ?? 0;
+      final localSw = _parseVersion(localData['Software version']);
+      final localIt = _parseVersion(localData['Iteration version']);
+      debugPrint('[Update] local: SW=$localSw IT=$localIt');
+      if (localSw == 0 && localIt == 0) {
+        debugPrint('[Update] local version is 0.0, skipping check');
+        return;
+      }
 
       final response = await http.get(Uri.parse(_remoteUrl)).timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return;
@@ -26,15 +31,18 @@ class UpdateService {
       final vision = remoteJson['vision'] as Map<String, dynamic>?;
       if (vision == null) return;
 
-      final remoteSw = vision['Software version'] as int? ?? 0;
-      final remoteIt = vision['Iteration version'] as int? ?? 0;
+      final remoteSw = _parseVersion(vision['Software version']);
+      final remoteIt = _parseVersion(vision['Iteration version']);
       final importance = vision['importance'] as bool? ?? false;
       final packageUrl = vision['package'] as String? ?? '';
       final describe = vision['describe'] as Map<String, dynamic>?;
       final descEn = describe?['English'] as String? ?? '';
       final descZh = describe?['Chinese'] as String? ?? '';
 
-      if (remoteSw > localSw || (remoteSw == localSw && remoteIt > localIt)) {
+      final needUpdate = remoteSw > localSw || (remoteSw == localSw && remoteIt > localIt);
+      debugPrint('[Update] remote: SW=$remoteSw IT=$remoteIt importance=$importance');
+      debugPrint('[Update] needUpdate: $needUpdate');
+      if (needUpdate) {
         if (!context.mounted) return;
         _showUpdateDialog(context, importance: importance, packageUrl: packageUrl, descEn: descEn, descZh: descZh);
       }
@@ -47,10 +55,16 @@ class UpdateService {
     try {
       final jsonStr = await rootBundle.loadString('assets/vision.json');
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-      return (data['vision'] as Map<String, dynamic>?) ?? {};
+      return (data['vision'] as Map<String, dynamic>?);
     } catch (_) {
       return null;
     }
+  }
+
+  static int _parseVersion(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return 0;
   }
 
   static Future<void> _showUpdateDialog(BuildContext context, {

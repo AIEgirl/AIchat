@@ -1,7 +1,7 @@
 {
     "vision":{
         "Software version": 2 ,
-        "Iteration version": 0 ,
+        "Iteration version": 1 ,
         "describe":{
             "English": "Fixed a critical bug and added a group chat feature." ,
             "Chinese": "修复了致命bug，并且增加了群聊功能"
