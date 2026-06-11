@@ -42,6 +42,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
       inputUnit: prefs.getString('input_unit') ?? 'per_1000',
       outputPrice: prefs.getDouble('output_price') ?? 0,
       outputUnit: prefs.getString('output_unit') ?? 'per_1000',
+      thinkingMode: prefs.getBool('thinking_mode') ?? true,
+      temperature: prefs.getDouble('temperature') ?? 1.0,
     );
   }
 
@@ -51,11 +53,8 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   }
 
   static const List<PresetProvider> presetProviders = [
-    PresetProvider('DeepSeek', 'https://api.deepseek.com', ['deepseek-chat', 'deepseek-reasoner']),
-    PresetProvider('Kimi (Moonshot)', 'https://api.moonshot.cn/v1', ['kimi-k2.6', 'kimi-k2.6-thinking']),
-    PresetProvider('通义千问 (Qwen)', 'https://dashscope.aliyuncs.com/compatible-mode/v1', ['qwen-plus', 'qwen-max']),
-    PresetProvider('智谱 GLM', 'https://open.bigmodel.cn/api/paas/v4', ['glm-4-plus', 'glm-4']),
-    PresetProvider('OpenAI', 'https://api.openai.com/v1', ['gpt-4o', 'gpt-4o-mini']),
+    PresetProvider('DeepSeek', 'https://api.deepseek.com', ['deepseek-v4-flash', 'deepseek-v4-pro']),
+    PresetProvider('Custom', '', []),
   ];
 
   // ─── 供应商 CRUD ─────────────────
@@ -228,6 +227,18 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     state = state.copyWith(proactiveEnabled: v);
   }
 
+  Future<void> setThinkingMode(bool v) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('thinking_mode', v);
+    state = state.copyWith(thinkingMode: v);
+  }
+
+  Future<void> setTemperature(double v) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('temperature', v);
+    state = state.copyWith(temperature: v);
+  }
+
   Future<void> updateSilenceThreshold(double h) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('silence_threshold_hours', h);
@@ -324,6 +335,8 @@ class SettingsState {
   final String inputUnit;
   final double outputPrice;
   final String outputUnit;
+  final bool thinkingMode;
+  final double temperature;
 
   const SettingsState({
     this.providers = const [],
@@ -343,6 +356,8 @@ class SettingsState {
     this.inputUnit = 'per_1000',
     this.outputPrice = 0,
     this.outputUnit = 'per_1000',
+    this.thinkingMode = true,
+    this.temperature = 1.0,
   });
 
   int get totalTokens => totalPromptTokens + totalCompletionTokens;
@@ -369,6 +384,7 @@ class SettingsState {
     int? totalPromptTokens, int? totalCompletionTokens,
     String? themeMode, int? primaryColor,
     double? inputPrice, String? inputUnit, double? outputPrice, String? outputUnit,
+    bool? thinkingMode, double? temperature,
   }) {
     return SettingsState(
       providers: providers ?? this.providers, activeProviderId: activeProviderId ?? this.activeProviderId,
@@ -381,6 +397,8 @@ class SettingsState {
       themeMode: themeMode ?? this.themeMode, primaryColor: primaryColor ?? this.primaryColor,
       inputPrice: inputPrice ?? this.inputPrice, inputUnit: inputUnit ?? this.inputUnit,
       outputPrice: outputPrice ?? this.outputPrice, outputUnit: outputUnit ?? this.outputUnit,
+      thinkingMode: thinkingMode ?? this.thinkingMode,
+      temperature: temperature ?? this.temperature,
     );
   }
 }

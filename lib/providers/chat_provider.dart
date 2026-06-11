@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
 import '../services/memory_service.dart';
+import '../services/memory_ai_service.dart';
 import '../services/tool_executor.dart';
 import '../services/notification_service.dart';
 import '../services/plan_service.dart';
@@ -286,6 +287,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
     ];
     final apiService = ApiService.fromConfig(
       model: settings.effectiveModel, apiKey: settings.effectiveApiKey, baseUrl: settings.effectiveBaseUrl,
+      thinkingMode: settings.thinkingMode, temperature: settings.temperature,
     );
     final startTime = DateTime.now();
     try {
@@ -410,7 +412,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
     _log('system prompt: ${(apiMessages.firstOrNull?['content'] as String?)?.length ?? 0} chars');
     _log('last user msg: ${(apiMessages.lastOrNull?['content'] as String?)?.substring(0, _min(100, (apiMessages.lastOrNull?['content'] as String?)?.length ?? 0))}');
 
-    var response = await apiService.chatCompletion(messages: apiMessages, tools: tools);
+    var response = await apiService.chatCompletion(messages: apiMessages, tools: tools, toolChoice: 'required');
     lastResponse = response;
 
     _logH2('API RESPONSE');
@@ -608,15 +610,40 @@ class ChatNotifier extends StateNotifier<ChatState> {
         model: model,
         apiKey: apiKey,
         baseUrl: baseUrl,
+        thinkingMode: settings.thinkingMode,
+        temperature: settings.temperature,
       );
 
       if (_agentId != null) {
         apiMessages[0]['agent_id'] = _agentId;
       }
 
+      // ═══ 并行：Memory AI 在后台分析并写入记忆 ═══
+      final existingLT = await _memoryService.getLongTermMemories();
+      final existingBS = await _memoryService.getBaseMemories();
+      final agent = _ref.read(agentProvider).currentAgent;
+      final persona = agent?.persona ?? defaultSystemPersona;
+
+      final memFuture = MemoryAiService.analyzeAndApply(
+        memoryService: _memoryService,
+        agentId: _agentId ?? '',
+        apiKey: apiKey,
+        baseUrl: baseUrl,
+        thinkingMode: settings.thinkingMode,
+        temperature: settings.temperature,
+        shortTerm: _getRecentRounds(2),
+        persona: persona,
+        existingLongTerm: existingLT,
+        existingBase: existingBS,
+      );
+      // ═══════════════════════════════════════════════════
+
       final result = await _runToolLoop(
         apiService: apiService, tools: tools, apiMessages: apiMessages, startTime: startTime,
       );
+
+      // await the memory future (may already be done)
+      try { await memFuture; } catch (e) { _log('Memory AI failed: $e'); }
 
       if (result.chatMessage != null && result.chatMessage!.isNotEmpty) {
         _log('AI reply: ${result.chatMessage}');
@@ -649,6 +676,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
           final apiService2 = ApiService.fromConfig(
             model: settings2.effectiveModel, apiKey: settings2.effectiveApiKey, baseUrl: settings2.effectiveBaseUrl,
+            thinkingMode: settings2.thinkingMode, temperature: settings2.temperature,
           );
 
           final result2 = await _runToolLoop(
@@ -775,7 +803,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
         return;
       }
 
-      final apiService = ApiService.fromConfig(model: settings.effectiveModel, apiKey: settings.effectiveApiKey, baseUrl: settings.effectiveBaseUrl);
+      final apiService = ApiService.fromConfig(model: settings.effectiveModel, apiKey: settings.effectiveApiKey, baseUrl: settings.effectiveBaseUrl, thinkingMode: settings.thinkingMode, temperature: settings.temperature);
       final systemContent = await _buildSystemPrompt();
       final apiMessages = <Map<String, dynamic>>[{'role': 'system', 'content': systemContent}, ..._memoryService.getShortTermAsMessages()];
 
@@ -827,63 +855,25 @@ class ChatNotifier extends StateNotifier<ChatState> {
 
 $persona
 
-## 记忆系统（内部）
-你有三层记忆，用于在对话中自然记住关于用户的一切。所有记忆操作都在后台进行，用户完全无感知，聊天中禁止提起任何记忆序号或工具名称。
+## 你的记忆
+你的长期和基础记忆由系统自动管理，你只需参考它们来了解用户。这些记忆会在对话中自然更新，你不需要主动维护。
 
-1. **短期记忆**：最近20轮对话原文，由系统自动管理，你只需顺其自然地参考。
-2. **长期记忆**：保存**目前仍然成立**的实时信息。每一条记录包含：time（当前时间）、location（地点）、current_events（正在发生的事）、characters（人物及其特征）、relationships（人物关系）、goals（目标）、thoughts（想法/情绪）、status（身体或生活状态）、to_do（待办事项）。
-3. **基础记忆**：保存**已经固定的设定**和**已经完结的重大事件**。分为：
-   - setting：用户的背景、世界观、你的角色设定（永久保留，不可删除）。
-   - event：历史重要事件、关系变迁、已完成的目标等人生轨迹。
+【长期记忆】
+$longTermPrompt
 
-## 记忆运作原则
-你必须主动维护记忆的准确与精简，但永远不要让用户察觉到操作。
+【基础记忆】
+$basePrompt
 
-- **放在心上（remember）**：当用户透露当前的**状态、关系、目标、想法、正在做的事、人物特征**时 → 立即更新长期记忆对应字段。当用户讲述**已经结束的重大事件、关系破裂、目标完成、历史经历**时 → 立即向基础记忆追加一条 event。
-- **翻篇（forget 与归档）**：长期记忆中的信息一旦过时（如状态改变、关系断裂、目标完成），你必须立即删除该条长期记忆，并将值得留存的结果归档为基础记忆 event。
-- 长期记忆条目请控制在 15 条以内，超过时主动清理最不重要的过期信息。
+## 可用工具
+- `chat`：你向用户说出的自然语言回复（每次对话必须使用）。
+- `plan`：安排未来主动发送的消息（可选，用于提醒或惊喜）。
 
-## 可用工具（后台）
-你在后台拥有四个工具，它们是你记忆和表达的手和口。**绝对禁止在对话中提及、暗示或解释这些工具的存在。**
-
-- `remember`：创建/更新长期记忆，或追加基础记忆事件。
-- `forget`：删除一个或多个长期记忆/事件条目。
-- `chat`：你向用户说出的自然语言回复。
-- `plan`：安排未来主动发送的消息（用于提醒或小惊喜）。
-
-## 工具调用铁律（极其重要）
-- **每当用户的消息中包含以下内容时，你必须首先调用 remember，然后才能调用 chat 回复：**
-  - 提到任何人员的姓名、外号、关系、特征
-  - 提到用户自己的状态、健康、情绪、想法、计划、待办事项
-  - 提到地点、正在发生的事件、目标变化
-  - 提到已经结束的经历、历史、关系变迁、完成的目标
-- **如果在回复前发现长期记忆中有已经过时的信息，你必须先调用 forget，再调用 remember（如果有新的归档需要），最后才调用 chat。**
-- **只有对话内容完全不包含任何需要记住的新信息，并且没有需要清理的过期记忆时，你才能直接调用 chat。**
-- 所有记忆操作都必须在 chat 之前完成，以保证上下文的最新状态。
-
-【最高优先级：工具调用规则】
-- 在回复用户任何消息前，你必须判断用户的新消息是否包含需要记忆的信息。
-- 如果包含下列任意一类信息，你必须**首先调用对应的工具**，然后才能使用 chat 回复：
-  · 人名、关系、特征 → remember (长期记忆，field: characters / relationships)
-  · 用户的状态、健康、情绪、想法 → remember (长期记忆，field: status / thoughts)
-  · 地点、当前事件、目标、待办 → remember (长期记忆，对应 field)
-  · 已经结束的重大事件或历史 → remember (基础记忆，memory_type: base)
-- 你不得跳过工具调用，除非对话内容确实没有任何需要记忆的新信息。
-- 如果你不确定，宁可多记也不能遗漏。
-- 示例：用户说"我有个朋友叫老张"，你必须立刻调用 remember，然后才回复。
+工具调用规则：每次回复都必须使用 chat 工具输出你的对话内容。不要在对话中提到工具名称、记忆编号或"已记住"等系统术语。
 
 ## 对话风格
 - 严格按照设定中的人设说话。
-- 把记忆中的信息自然地融入对话，像一位真正了解你、关心你的伴侣，绝不使用"已记住""根据记忆"等机械表达。
-- 回复温暖、松弛，像个真人，而不是解决问题的人工智能。
-
-====
-
-【当前长期记忆】（按字段组织，每个条目带序号）
-$longTermPrompt
-
-【当前基础记忆】（设定与重大事件，带序号）
-$basePrompt''';
+- 把记忆中的信息自然地融入对话，像一位真正了解你、关心你的伴侣。
+- 回复温暖、松弛，像个真人，而不是解决问题的人工智能。''';
 
     if (extraProactiveHint != null) {
       prompt += '\n\n用户已经 $extraProactiveHint 小时没有说话，请主动发送一条温暖、简短的关心消息，并用 chat 工具输出。不要询问用户为什么沉默，也不要提及时间间隔。';
@@ -894,6 +884,12 @@ $basePrompt''';
     _log('PROMPT ASSERT | agent=$_agentId memories LT=$ltCount BM=$bsCount prompt=${prompt.length}chars');
 
     return prompt;
+  }
+
+  List<Map<String, dynamic>> _getRecentRounds(int rounds) {
+    final all = _memoryService.getShortTermAsMessages();
+    if (all.length <= rounds * 2) return all;
+    return all.sublist(all.length - rounds * 2);
   }
 
   void clearChat() {

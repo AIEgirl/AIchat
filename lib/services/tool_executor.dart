@@ -222,6 +222,13 @@ class ToolExecutor {
       final gid = groupService?.activeGroupId;
       if (gid == null || gid.isEmpty) return '错误: 未在群聊上下文中';
 
+      final allAgents = await DatabaseService.getAgents();
+      final dup = allAgents.where((a) =>
+          a.name.trim().toLowerCase() == name.trim().toLowerCase() &&
+          a.sourceGroupId == gid &&
+          a.isSimCharacter).firstOrNull;
+      if (dup != null) return '角色 "$name" 已存在于本群，创建失败。如需重建请先移除旧角色或换一个名字。';
+
       final agent = Agent(
         name: name,
         gender: gender,

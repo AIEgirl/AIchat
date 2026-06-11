@@ -26,10 +26,7 @@ class ModelService {
           .map((e) => (e as Map<String, dynamic>)['id'] as String)
           .where((id) =>
               !id.contains('instruct') &&
-              !id.contains('embedding') &&
-              !id.contains('reasoner') &&
-              !id.contains('thinking') &&
-              !id.contains('r1'))
+              !id.contains('embedding'))
           .toList();
     }
     throw Exception('Failed to fetch models: ${response.statusCode}');

@@ -17,14 +17,20 @@ class ApiService {
   String _baseUrl;
   String _apiKey;
   String _model;
+  final bool _thinkingMode;
+  final double _temperature;
 
   ApiService({
     required String baseUrl,
     required String apiKey,
     required String model,
+    bool thinkingMode = false,
+    double temperature = 1.0,
   })  : _baseUrl = baseUrl,
         _apiKey = apiKey,
-        _model = model;
+        _model = model,
+        _thinkingMode = thinkingMode,
+        _temperature = temperature;
 
   void updateConfig({String? baseUrl, String? apiKey, String? model}) {
     if (baseUrl != null) _baseUrl = baseUrl;
@@ -36,8 +42,10 @@ class ApiService {
     required String model,
     required String apiKey,
     required String baseUrl,
+    bool thinkingMode = false,
+    double temperature = 1.0,
   }) {
-    return ApiService(baseUrl: baseUrl, apiKey: apiKey, model: model);
+    return ApiService(baseUrl: baseUrl, apiKey: apiKey, model: model, thinkingMode: thinkingMode, temperature: temperature);
   }
 
   static Future<String> testConnection({
@@ -48,7 +56,7 @@ class ApiService {
     final url = baseUri.resolve('v1/chat/completions').toString();
 
     final body = jsonEncode({
-      'model': 'deepseek-chat',
+        'model': 'deepseek-v4-flash',
       'messages': [{'role': 'system', 'content': 'ping'}],
       'max_tokens': 1,
     });
@@ -98,12 +106,16 @@ class ApiService {
       'model': _model,
       'messages': messages,
       'tools': tools,
-      'tool_choice': 'required',
+      'tool_choice': toolChoice,
     };
 
-    // DeepSeek 模型强制关闭思考模式
-    if (_model.contains('deepseek')) {
-      bodyJson['thinking'] = {'type': 'disabled'};
+    if (_thinkingMode) {
+      bodyJson['thinking'] = {'type': 'enabled'};
+      bodyJson['reasoning_effort'] = 'high';
+      bodyJson.remove('temperature');
+      bodyJson.remove('top_p');
+    } else {
+      bodyJson['temperature'] = _temperature;
     }
 
     debugPrint('  Body has tools: ${bodyJson.containsKey('tools')}');
@@ -139,9 +151,9 @@ class ApiService {
         bodyJson.remove('tool_choice');
         retried = true;
       }
-      if (bodyJson.containsKey('thinking') &&
-          (e.message.contains('thinking') || e.message.contains('unexpected parameter'))) {
+      if (bodyJson.containsKey('thinking') || bodyJson.containsKey('reasoning_effort')) {
         bodyJson.remove('thinking');
+        bodyJson.remove('reasoning_effort');
         retried = true;
       }
       if (retried) {
@@ -323,8 +335,6 @@ class ApiService {
 
   static List<Map<String, dynamic>> _getPrivateToolDefinitions() {
     return [
-      _rememberTool(),
-      _forgetTool(),
       _chatTool(),
       _planTool(),
     ];
@@ -493,15 +503,15 @@ class ApiService {
       'type': 'function',
       'function': {
         'name': 'manage_character',
-        'description': '在群聊中创建或移除一个角色。add 时创建新角色并加入群聊，remove 时删除角色。',
+        'description': '为故事世界创建或移除 NPC/配角。persona 须包含身份、性格、与世界观的关系。创建后须立即用 chatgroup 定义初次登场。禁止重复创建同名角色。禁止创建：与 user 主角定位重叠的角色。user 自己扮演主角。',
         'parameters': {
           'type': 'object',
           'properties': {
             'action': {'type': 'string', 'enum': ['add', 'remove'], 'description': 'add 添加角色，remove 移除角色。'},
             'name': {'type': 'string', 'description': '角色名称。'},
             'gender': {'type': 'string', 'enum': ['男', '女', '其他'], 'description': '角色性别，add 时必填。'},
-            'description': {'type': 'string', 'description': '角色一句话描述。'},
-            'persona': {'type': 'string', 'description': '角色完整人设描述，add 时必填。'},
+            'description': {'type': 'string', 'description': '角色定位描述：ta 在故事中的身份和当前场景中的位置。'},
+            'persona': {'type': 'string', 'description': '角色完整人设：身份背景、性格特征、说话格式（第一人称+() 表达动作）、在当前场景中的行为动机。必须符合世界观约束。'},
             'target': {'type': 'string', 'description': '要移除的角色名称或 ID，remove 时必填。'},
           },
           'required': ['action', 'name'],

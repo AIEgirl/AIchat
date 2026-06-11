@@ -1,3 +1,6 @@
+import 'dart:convert';
+import '../services/tool_executor.dart';
+
 class GroupMessage {
   final int? id;
   final String groupId;
@@ -7,6 +10,7 @@ class GroupMessage {
   final String content;
   final int timestamp;
   final String? toolCallData;
+  final List<ToolExecutionLog>? toolLogs;
 
   GroupMessage({
     this.id,
@@ -17,7 +21,23 @@ class GroupMessage {
     required this.content,
     int? timestamp,
     this.toolCallData,
-  }) : timestamp = timestamp ?? DateTime.now().millisecondsSinceEpoch;
+    List<ToolExecutionLog>? toolLogs,
+  })  : toolLogs = toolLogs ?? _parseToolLogs(toolCallData),
+        timestamp = timestamp ?? DateTime.now().millisecondsSinceEpoch;
+
+  static List<ToolExecutionLog>? _parseToolLogs(String? json) {
+    if (json == null || json.isEmpty) return null;
+    try {
+      final list = jsonDecode(json) as List;
+      return list.map((e) => ToolExecutionLog(
+        toolName: e['toolName'] as String,
+        arguments: Map<String, dynamic>.from(e['arguments'] as Map),
+        result: e['result'] as String,
+      )).toList();
+    } catch (_) {
+      return null;
+    }
+  }
 
   bool get isUser => senderType == 'user';
   bool get isAgent => senderType == 'agent';
@@ -31,6 +51,7 @@ class GroupMessage {
     String? content,
     int? timestamp,
     String? toolCallData,
+    List<ToolExecutionLog>? toolLogs,
   }) {
     return GroupMessage(
       id: id ?? this.id,
@@ -41,6 +62,7 @@ class GroupMessage {
       content: content ?? this.content,
       timestamp: timestamp ?? this.timestamp,
       toolCallData: toolCallData ?? this.toolCallData,
+      toolLogs: toolLogs ?? this.toolLogs,
     );
   }
 

@@ -158,7 +158,7 @@ class _GroupCreateScreenState extends ConsumerState<GroupCreateScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final agentState = ref.watch(agentProvider);
-    final agents = agentState.agents;
+    final agents = agentState.agents.where((a) => !a.isSimCharacter).toList();
 
     return Scaffold(
       appBar: AppBar(

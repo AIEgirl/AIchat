@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="aichat"
+        android:label="回响"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

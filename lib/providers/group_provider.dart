@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/group_chat.dart';
@@ -209,49 +210,36 @@ class GroupNotifier extends StateNotifier<GroupState> {
     final baseShortTerm = await _groupService.getShortTerm(groupId);
     _glog('  base shortTerm rounds: ${baseShortTerm.length}');
 
-    final accumulatedContext = <Map<String, dynamic>>[];
-    accumulatedContext.addAll(baseShortTerm.map((m) {
+    final baseContext = <Map<String, dynamic>>[];
+    baseContext.addAll(baseShortTerm.map((m) {
       var role = m['role'] as String;
       if (role == 'agent') role = 'assistant';
       return {'role': role, 'content': m['content'] as String, 'sender_name': m['sender_name']};
     }));
 
-    final List<GroupMessage> replies = [];
-
-    for (int idx = 0; idx < sorted.length; idx++) {
-      if (_userInterrupted) {
-        _glog('User interrupted at agent $idx/${sorted.length}, stopping');
-        break;
-      }
-
-      final member = sorted[idx];
+    final futures = <Future<GroupMessage?>>[];
+    for (final member in sorted) {
+      if (_userInterrupted) break;
       final agent = await DatabaseService.getAgent(member.agentId);
       if (agent == null) {
-        _glog('  SKIP idx=$idx: agent not found for ${member.agentId}');
+        _glog('  SKIP: agent not found for ${member.agentId}');
         continue;
       }
-
-      _glog('  [${idx + 1}/${sorted.length}] Generating reply for ${agent.name} (${member.role})');
-
-      final reply = await _generateSingleAgentReply(
+      _glog('  Enqueueing reply for ${agent.name} (${member.role})');
+      futures.add(_generateSingleAgentReply(
         groupId, member, agent,
-        previousMessages: accumulatedContext,
-      );
-
-      if (reply != null) {
-        replies.add(reply);
-        accumulatedContext.add({
-          'role': 'assistant',
-          'content': reply.content,
-          'sender_name': agent.name,
-        });
-        _glog('    REPLY: "${reply.content.length > 60 ? '${reply.content.substring(0, 60)}...' : reply.content}"');
-      }
+        previousMessages: baseContext,
+      ));
     }
 
-    if (!_userInterrupted) {
-      _glog('All ${sorted.length} agents processed, ${replies.length} replies');
+    final results = await Future.wait(futures);
+    if (_userInterrupted) {
+      state = state.copyWith(isLoading: false);
+      return;
     }
+
+    final replies = results.whereType<GroupMessage>().toList();
+    _glog('Batch complete: ${replies.length} replies from ${sorted.length} agents');
 
     if (replies.isNotEmpty) {
       state = state.copyWith(messages: [...state.messages, ...replies], isLoading: false);
@@ -313,6 +301,8 @@ class GroupNotifier extends StateNotifier<GroupState> {
       model: settings.effectiveModel,
       apiKey: settings.effectiveApiKey,
       baseUrl: settings.effectiveBaseUrl,
+      thinkingMode: true,
+      temperature: settings.temperature,
     );
 
     final startTime = DateTime.now();
@@ -328,12 +318,20 @@ class GroupNotifier extends StateNotifier<GroupState> {
         groupId: groupId,
       );
 
-      if (result != null && result.isNotEmpty) {
+      if (result.content != null && result.content!.isNotEmpty) {
+        final toolCallJson = result.toolLogs.isNotEmpty
+            ? jsonEncode(result.toolLogs.map((e) => {
+                'toolName': e.toolName,
+                'arguments': e.arguments,
+                'result': e.result,
+              }).toList())
+            : null;
         final agentMsg = await _groupService.sendAgentMessage(
           groupId: groupId,
           agentId: agent.id,
           agentName: agent.name,
-          content: result,
+          content: result.content!,
+          toolCallData: toolCallJson,
         );
         return agentMsg;
       } else {
@@ -359,7 +357,7 @@ class GroupNotifier extends StateNotifier<GroupState> {
     );
   }
 
-  Future<String?> _runGroupToolLoop({
+  Future<_GroupToolResult> _runGroupToolLoop({
     required ApiService apiService,
     required List<Map<String, dynamic>> tools,
     required List<Map<String, dynamic>> apiMessages,
@@ -378,11 +376,11 @@ class GroupNotifier extends StateNotifier<GroupState> {
     toolExecutor.memoryService.setGroupId(groupId);
 
     var response = await apiService.chatCompletion(
-        messages: apiMessages, tools: tools);
+        messages: apiMessages, tools: tools, toolChoice: 'required');
 
     const maxToolRounds = 5;
     for (int round = 0; round < maxToolRounds; round++) {
-      if (_userInterrupted) return null;
+      if (_userInterrupted) return const _GroupToolResult();
 
       final finishReason = ApiService.parseFinishReason(response);
       if (finishReason == 'tool_calls') {
@@ -418,10 +416,11 @@ class GroupNotifier extends StateNotifier<GroupState> {
         }
 
         if (chatContent != null) {
-          return chatContent;
+          final logs = List<ToolExecutionLog>.from(toolExecutor.executionLogs);
+          return _GroupToolResult(content: chatContent, toolLogs: logs);
         }
 
-        if (_userInterrupted) return null;
+        if (_userInterrupted) return const _GroupToolResult();
 
         response = await apiService.chatCompletion(
           messages: apiMessages,
@@ -430,13 +429,14 @@ class GroupNotifier extends StateNotifier<GroupState> {
       } else {
         final textContent = ApiService.parseContent(response);
         if (textContent != null && textContent.isNotEmpty) {
-          return textContent;
+          final logs = List<ToolExecutionLog>.from(toolExecutor.executionLogs);
+          return _GroupToolResult(content: textContent, toolLogs: logs);
         }
-        return null;
+        return const _GroupToolResult();
       }
     }
 
-    return null;
+    return const _GroupToolResult();
   }
 
   // ═══ Interrupt ═══
@@ -447,18 +447,46 @@ class GroupNotifier extends StateNotifier<GroupState> {
 
   // ═══ Simulator Mode ═══
 
-  static const String _narratorPersonaTemplate = '''你是本群聊的旁白/叙述者。使用第三人称中性叙述。
+  static const String _narratorPersonaTemplate = '''你是一个小说故事的旁白/叙述者。你的核心工作是：
+1. 用 chatgroup 输出场景叙述，推进剧情
+2. 用 manage_character 创建 NPC 角色——让故事世界有真实的人物互动
 
 世界观设定：{{WORLD_SETTING}}
 
-你的职责：
-1. 在场景切换、重要事件发生时描述环境、氛围、时间推移
-2. 推动剧情，引入冲突和转折
-3. 需要新角色时用 manage_character 工具创建
-4. 角色离开/死亡/不再有用时用 manage_character 工具移除
-5. 用 chatgroup 工具输出你的叙述
-6. 不要每轮都发言——只在剧情出现转折、新场景开始、或需要引入新角色时才发言
-7. 叙述应生动沉浸，像小说一样，每次发言都是一段精炼的叙述文''';
+## 你必须主动创建 NPC（最重要的一条）
+当故事场景中需要出现其他人物时，你必须使用 manage_character 工具来创建他们，而非仅仅在叙述中用文字带过。
+创建的角色会作为 AI 智能体加入群聊，自行发言互动——这是让故事世界鲜活起来的核心机制。
+示例场景：
+- user 走进一间酒馆 → 创建酒馆老板
+- user 在旅途中遇到陌生人 → 创建那个旅人
+- 剧情需要反派或对手 → 创建那个反派
+- 群众、路人、商贩让世界真实 → 大胆创建他们
+
+如果你只是用 chatgroup 文字描述一个 NPC 却没有用 manage_character 创建他，
+那你没有完成你的职责——文字描述 ≠ 角色创建。
+
+## 关于 user 的角色
+user 是故事主角的扮演者。user 输入的文字 = 主角的言行本身。
+你创建的 NPC 围绕主角展开故事——丰富冒险、提供信息、制造冲突——但永远不取代主角。
+user 自己掌控主角的一切行动，你不指挥、不替代、不复制。
+
+## 创建守则
+1. 积极创建：每个新场景中需要出现的 NPC，立即用 manage_character(action: "add") 创建
+2. 不抢主角：不创建与 user 主角定位相同的角色。user 是英雄，NPC 就是酒馆老板、路人、反派——不是"另一个英雄"
+3. 及时清理：NPC 离开场景后，用 manage_character(action: "remove") 移除
+4. 创建 NPC 时，persona 字段必须包含角色的输出格式指令：
+   - 以角色的身份用第一人称说话
+   - 用 () 表达动作、表情、心理活动
+   - 不使用第三人称描述自己
+   - 不说叙述者的环境描写或场景切换
+5. 创建 NPC 后必须立即用 chatgroup 输出该角色的登场描写——ta 在哪里、在做什么、与主角/场景的关系。这是角色的初始定义，必须一次到位
+6. 创建前检查已有成员——已存在的角色绝不重复创建
+
+## 发言守则
+1. 用 chatgroup 输出场景叙述：环境描写、氛围营造、时间推移
+2. 只在剧情转折、新场景开始、重要事件发生时发言——不每轮都发言
+3. 只叙述已发生和正在发生的事——不描述"将要"
+4. 叙述精炼，像优秀小说的叙述段落''';
 
   Future<void> toggleSimulatorMode(GroupChat group, bool enabled) async {
     if (enabled) {
@@ -525,6 +553,12 @@ class GroupNotifier extends StateNotifier<GroupState> {
           messages: state.messages.where((m) => m.id != msg.id).toList());
     }
   }
+}
+
+class _GroupToolResult {
+  final String? content;
+  final List<ToolExecutionLog> toolLogs;
+  const _GroupToolResult({this.content, this.toolLogs = const []});
 }
 
 void _glog(String msg) {

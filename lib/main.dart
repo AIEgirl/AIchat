@@ -70,7 +70,7 @@ class AIApp extends ConsumerWidget {
     }
 
     return MaterialApp(
-      title: 'AI Memory Chat',
+      title: '回响',
       debugShowCheckedModeBanner: false,
       locale: locale,
       localizationsDelegates: const [

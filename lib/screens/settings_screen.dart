@@ -11,6 +11,7 @@ import '../providers/memory_provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/provider_config.dart';
 import '../services/api_service.dart';
+import '../services/model_service.dart';
 import '../services/database_service.dart';
 import '../services/locale_service.dart';
 import '../l10n/app_localizations.dart';
@@ -19,7 +20,6 @@ import 'token_usage_screen.dart';
 import 'memory_screen.dart';
 import 'plugin_screen.dart';
 import 'chat_screen.dart';
-import 'agent_create_screen.dart';
 import 'novel_history_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -74,8 +74,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         children: [
           _sectionHeader(l10n.get('suppliers')),
           _buildSupplierSection(s, provider),
-          _sectionHeader(l10n.get('agentSection')),
-          _buildAgentEntry(),
           _sectionHeader(l10n.get('modelAndMode')),
           _buildModelSection(provider),
           _sectionHeader(l10n.get('personaAndCare')),
@@ -111,19 +109,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   // ═══ 1. Providers ═══
-
-  Widget _buildAgentEntry() {
-    final l10n = AppLocalizations.of(context);
-    return _sectionCard(children: [
-      ListTile(
-        leading: const Icon(Icons.person),
-        title: Text(l10n.get('createNewAgent')),
-        subtitle: Text(l10n.get('manageAgentDesc')),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgentCreateScreen())),
-      ),
-    ]);
-  }
 
   Widget _buildSupplierSection(SettingsState s, ProviderConfig? provider) {
     final l10n = AppLocalizations.of(context);
@@ -289,11 +274,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _buildModelSection(ProviderConfig? provider) {
     final l10n = AppLocalizations.of(context);
+    final s = ref.read(settingsProvider);
     final preset = provider != null
         ? SettingsNotifier.presetProviders.where((pr) => pr.name == provider.name).firstOrNull
         : null;
-    final defaultModel = preset?.defaultModels.first ?? 'deepseek-chat';
-    final ctrl = TextEditingController(text: provider?.selectedModel ?? '');
+    final defaultModel = preset?.defaultModels.first ?? 'deepseek-v4-flash';
+    final cachedModels = s.getAvailableModels();
+    final hasCached = cachedModels.isNotEmpty;
 
     if (provider == null) {
       return _sectionCard(children: [
@@ -305,33 +292,82 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       Padding(
         padding: const EdgeInsets.all(12),
         child: Column(children: [
-          TextField(
-            controller: ctrl,
-            decoration: InputDecoration(
-              labelText: l10n.get('modelNameLabel'),
-              hintText: defaultModel,
-              border: const OutlineInputBorder(),
+          Row(children: [
+            Expanded(
+              child: hasCached
+                  ? DropdownButtonFormField<String>(
+                      value: cachedModels.contains(provider.selectedModel) ? provider.selectedModel : (provider.selectedModel.isNotEmpty ? null : cachedModels.first),
+                      isExpanded: true,
+                      decoration: InputDecoration(labelText: l10n.get('modelNameLabel'), border: const OutlineInputBorder(), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                      items: [
+                        for (final m in cachedModels) DropdownMenuItem(value: m, child: Text(m, style: const TextStyle(fontSize: 13))),
+                        if (provider.selectedModel.isNotEmpty && !cachedModels.contains(provider.selectedModel))
+                          DropdownMenuItem(value: provider.selectedModel, child: Text(provider.selectedModel, style: const TextStyle(fontSize: 13))),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) ref.read(settingsProvider.notifier).setSelectedModel(provider.id!, v);
+                      },
+                    )
+                  : TextField(
+                      controller: TextEditingController(text: provider.selectedModel),
+                      decoration: InputDecoration(labelText: l10n.get('modelNameLabel'), hintText: defaultModel, border: const OutlineInputBorder()),
+                      onChanged: (v) { if (v.trim().isNotEmpty) ref.read(settingsProvider.notifier).setSelectedModel(provider.id!, v.trim()); },
+                    ),
             ),
-            onChanged: (v) {
-              if (v.trim().isNotEmpty) {
-                ref.read(settingsProvider.notifier).setSelectedModel(provider.id!, v.trim());
-              }
-            },
-          ),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 48,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.download, size: 18),
+                label: Text(l10n.get('fetchModels'), style: const TextStyle(fontSize: 12)),
+                onPressed: () => _fetchModels(provider),
+              ),
+            ),
+          ]),
           if (provider.selectedModel.isEmpty)
             Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.get('pleaseEnterModel'), style: TextStyle(color: Theme.of(context).colorScheme.tertiary, fontSize: 12))),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.wifi_find, size: 18),
-              label: Text(l10n.get('testConnection')),
-              onPressed: () => _testConnection(provider),
+          const SizedBox(height: 12),
+          Row(children: [
+            Text(l10n.get('temperature'), style: const TextStyle(fontSize: 13)),
+            Expanded(
+              child: Slider(
+                value: s.temperature,
+                min: 0, max: 2, divisions: 20,
+                label: s.temperature.toStringAsFixed(1),
+                onChanged: (v) => ref.read(settingsProvider.notifier).setTemperature(v),
+              ),
             ),
+            SizedBox(width: 36, child: Text(s.temperature.toStringAsFixed(1), style: const TextStyle(fontSize: 12))),
+          ]),
+          const SizedBox(height: 4),
+          OutlinedButton.icon(
+            onPressed: () => _testConnection(provider),
+            icon: const Icon(Icons.wifi_find, size: 18),
+            label: Text(l10n.get('testConnection')),
+          ),
+          const Divider(height: 24),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.get('thinkingMode'), style: const TextStyle(fontSize: 14)),
+            subtitle: Text(l10n.get('thinkingModeDesc'), style: const TextStyle(fontSize: 12)),
+            value: s.thinkingMode,
+            onChanged: (v) => ref.read(settingsProvider.notifier).setThinkingMode(v),
           ),
         ]),
       ),
     ]);
+  }
+
+  Future<void> _fetchModels(ProviderConfig provider) async {
+    final l10n = AppLocalizations.of(context);
+    try {
+      final models = await ModelService.fetchModels(baseUrl: provider.apiBaseUrl, apiKey: provider.apiKey);
+      ref.read(settingsProvider.notifier).cacheModels(provider.id!, models);
+      setState(() {});
+      _snack('${l10n.get('fetchModels')} OK (${models.length} models)');
+    } catch (e) {
+      _snack('${l10n.get('fetchModels')} failed: $e', error: true);
+    }
   }
 
   Future<void> _testConnection(ProviderConfig provider) async {

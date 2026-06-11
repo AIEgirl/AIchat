@@ -562,7 +562,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _selectedIndices.clear();
   });
 
-  void _showWechatPopup(BuildContext context, int index) {
+  void _showWechatPopup(BuildContext context, int index, Offset position) {
+    HapticFeedback.lightImpact();
     final chatState = ref.read(chatProvider);
     if (index >= chatState.messages.length) return;
     final msg = chatState.messages[index];
@@ -570,41 +571,60 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final scheme = Theme.of(context).colorScheme;
     FocusManager.instance.primaryFocus?.unfocus();
 
+    Widget btn(IconData icon, String label, VoidCallback onTap, {Color? color}) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () { Navigator.pop(context); onTap(); },
+        child: SizedBox(
+          width: 64,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 24, color: color ?? scheme.onSurface),
+            const SizedBox(height: 6),
+            Text(label,
+                style: TextStyle(fontSize: 10, color: (color ?? scheme.onSurface).withValues(alpha: 0.8)),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+      );
+    }
+
     showMenu(
       context: context,
       color: scheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      position: const RelativeRect.fromLTRB(80, 300, 80, 300),
+      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       items: [
         PopupMenuItem(
-          child: ListTile(dense: true, leading: const Icon(Icons.copy, size: 20), title: Text(l10n.get('copyText'))),
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: msg.content));
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.get('copied')), duration: const Duration(seconds: 1)));
-          },
-        ),
-        PopupMenuItem(
-          child: ListTile(dense: true, leading: const Icon(Icons.checklist, size: 20), title: Text('多选')),
-          onTap: () => _enterMultiSelect(index),
-        ),
-        if (!msg.isUser) ...[
-          PopupMenuItem(
-            child: ListTile(dense: true, leading: const Icon(Icons.refresh, size: 20), title: Text(l10n.get('regenerate'))),
-            onTap: () => ref.read(chatProvider.notifier).regenerateMessage(index),
-          ),
-          if (msg.toolLogs != null)
-            PopupMenuItem(
-              child: ListTile(dense: true, leading: const Icon(Icons.code, size: 20), title: Text(l10n.get('viewToolCalls'))),
-              onTap: () {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _showToolLogsForMessage(context, msg);
-                });
-              },
+          enabled: false,
+          padding: EdgeInsets.zero,
+          child: IntrinsicWidth(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 8,
+                children: [
+                  btn(Icons.copy, l10n.get('copyText'), () {
+                    Clipboard.setData(ClipboardData(text: msg.content));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.get('copied')), duration: const Duration(seconds: 1)));
+                  }),
+                  btn(Icons.checklist, '多选', () => _enterMultiSelect(index), color: scheme.primary),
+                  if (!msg.isUser) ...[
+                    btn(Icons.refresh, l10n.get('regenerate'), () => ref.read(chatProvider.notifier).regenerateMessage(index)),
+                    if (msg.toolLogs != null)
+                      btn(Icons.code, l10n.get('viewToolCalls'), () {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _showToolLogsForMessage(context, msg);
+                        });
+                      }),
+                  ],
+                  btn(Icons.delete, l10n.get('deleteMessage'), () => _onDeleteMessage(msg), color: scheme.error),
+                ],
+              ),
             ),
-        ],
-        PopupMenuItem(
-          child: ListTile(dense: true, leading: Icon(Icons.delete, size: 20, color: scheme.error), title: Text(l10n.get('deleteMessage'), style: TextStyle(color: scheme.error))),
-          onTap: () => _onDeleteMessage(msg),
+          ),
         ),
       ],
     );
@@ -712,8 +732,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       isSelected: isSelected,
                       onTap: _multiSelectMode
                           ? () => _toggleSelect(index)
-                          : () => _showWechatPopup(context, index),
-                      onLongPress: () => _enterMultiSelect(index),
+                          : null,
+                      onLongPressStart: (pos) => _showWechatPopup(context, index, pos),
                     );
                   },
                 ),
@@ -1230,7 +1250,7 @@ class _AnimatedBubble extends StatefulWidget {
   final VoidCallback onDelete;
   final VoidCallback? onRegenerate;
   final VoidCallback? onTap;
-  final VoidCallback? onLongPress;
+  final void Function(Offset)? onLongPressStart;
   final bool showCheckbox;
   final bool isSelected;
 
@@ -1240,7 +1260,7 @@ class _AnimatedBubble extends StatefulWidget {
       required this.onDelete,
       this.onRegenerate,
       this.onTap,
-      this.onLongPress,
+      this.onLongPressStart,
       this.showCheckbox = false,
       this.isSelected = false});
 
@@ -1326,10 +1346,14 @@ class _AnimatedBubbleState extends State<_AnimatedBubble>
                       child: GestureDetector(
                         onTap: widget.showCheckbox
                             ? (widget.onTap ?? widget.onDelete)
-                            : (widget.onTap ?? () => _showActionBar(context)),
-                        onLongPress: widget.showCheckbox
-                            ? null
-                            : (widget.onLongPress ?? () => _showActionBar(context)),
+                            : (widget.onTap ?? null),
+                        onLongPressStart: (d) {
+                          if (widget.onLongPressStart != null) {
+                            widget.onLongPressStart!(d.globalPosition);
+                          } else if (!widget.showCheckbox) {
+                            _showActionBar(context);
+                          }
+                        },
                         onSecondaryTapDown:
                             ResponsiveLayout.isDesktop(context)
                                 ? (d) =>

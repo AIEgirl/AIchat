@@ -75,8 +75,8 @@ class MemoryRepository {
     await DatabaseService.insertShortTermMessage(msg);
   }
 
-  Future<void> deleteShortTermMessage(String id) async {
-    await DatabaseService.deleteShortTermMessage(id);
+  Future<void> deleteShortTermMessage(String id, {required String agentId}) async {
+    await DatabaseService.deleteShortTermMessage(id, agentId: agentId);
   }
 
   Future<void> clearShortTermMessages({required String agentId}) async {

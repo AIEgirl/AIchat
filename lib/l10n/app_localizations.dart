@@ -11,7 +11,7 @@ class AppLocalizations {
 
   static const _localizedValues = <String, Map<String, String>>{
     'en': {
-      'appTitle': 'AI Memory Chat',
+      'appTitle': '回响',
       'settings': 'Settings',
       'language': 'Language',
       'autoDetect': 'Auto (by IP)',
@@ -325,6 +325,10 @@ You are warm, attentive, and caring, like a real partner who genuinely cares abo
       'forceUpdateTips': 'Please install the latest version to continue.',
       'download': 'Download',
       'later': 'Later',
+      'thinkingMode': 'Thinking Mode',
+      'thinkingModeDesc': 'DeepSeek reasoning chain for better answers (increases response time)',
+      'temperature': 'Temperature',
+      'fetchModels': 'Fetch',
       'simulatorMode': 'Simulator Mode',
       'simulatorModeDesc': 'AI narrator auto-creates characters and drives the story',
       'worldSetting': 'World Setting',
@@ -645,6 +649,10 @@ You are warm, attentive, and caring, like a real partner who genuinely cares abo
       'forceUpdateTips': '请安装最新版本后继续使用。',
       'download': '立即下载',
       'later': '稍后提醒',
+      'thinkingMode': '思考模式',
+      'thinkingModeDesc': 'DeepSeek 推理链提升回答质量（会增加响应时间）',
+      'temperature': '温度',
+      'fetchModels': '获取',
       'simulatorMode': '模拟器模式',
       'simulatorModeDesc': 'AI 旁白自动创建角色并推动剧情',
       'worldSetting': '世界观设定',

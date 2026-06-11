@@ -247,8 +247,8 @@ class DatabaseService {
       final maps = await db.query('long_term_memories', where: 'agent_id = ?', whereArgs: [agentId], orderBy: 'id ASC');
       return maps.map(LongTermMemory.fromMap).toList();
     }
-    final maps = await db.query('long_term_memories', orderBy: 'id ASC');
-    return maps.map(LongTermMemory.fromMap).toList();
+    debugPrint('[DB] WARNING: getLongTermMemories called without agentId — returning empty');
+    return [];
   }
 
   static Future<void> insertLongTermMemory(LongTermMemory memory) async {
@@ -263,9 +263,7 @@ class DatabaseService {
         {'field': memory.field, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch},
         where: 'id = ? AND agent_id = ?', whereArgs: [memory.id, agentId]);
     } else {
-      await db.update('long_term_memories',
-        {'field': memory.field, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch},
-        where: 'id = ? AND agent_id IS NOT NULL', whereArgs: [memory.id]);
+      debugPrint('[DB] WARNING: updateLongTermMemory called without agentId — skipping');
     }
   }
 
@@ -274,8 +272,7 @@ class DatabaseService {
     if (agentId != null) {
       await db.delete('long_term_memories', where: 'id = ? AND agent_id = ?', whereArgs: [id, agentId]);
     } else {
-      debugPrint('[DB] WARNING: deleteLongTermMemory called without agentId, only deleting by id where agent_id IS NOT NULL');
-      await db.delete('long_term_memories', where: 'id = ? AND agent_id IS NOT NULL', whereArgs: [id]);
+      debugPrint('[DB] WARNING: deleteLongTermMemory called without agentId — skipping');
     }
   }
 
@@ -284,7 +281,7 @@ class DatabaseService {
     if (agentId != null) {
       await db.delete('long_term_memories', where: 'agent_id = ?', whereArgs: [agentId]);
     } else {
-      await db.delete('long_term_memories');
+      debugPrint('[DB] WARNING: clearLongTermMemories called without agentId — skipping');
     }
   }
 
@@ -304,8 +301,8 @@ class DatabaseService {
       final maps = await db.query('base_memories', where: 'agent_id = ?', whereArgs: [agentId], orderBy: 'id ASC');
       return maps.map(BaseMemory.fromMap).toList();
     }
-    final maps = await db.query('base_memories', orderBy: 'id ASC');
-    return maps.map(BaseMemory.fromMap).toList();
+    debugPrint('[DB] WARNING: getBaseMemories called without agentId — returning empty');
+    return [];
   }
 
   static Future<void> insertBaseMemory(BaseMemory memory) async {
@@ -320,9 +317,7 @@ class DatabaseService {
         {'type': memory.type, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch},
         where: 'id = ? AND agent_id = ?', whereArgs: [memory.id, agentId]);
     } else {
-      await db.update('base_memories',
-        {'type': memory.type, 'content': memory.content, 'updated_at': DateTime.now().millisecondsSinceEpoch},
-        where: 'id = ? AND agent_id IS NOT NULL', whereArgs: [memory.id]);
+      debugPrint('[DB] WARNING: updateBaseMemory called without agentId — skipping');
     }
   }
 
@@ -331,8 +326,7 @@ class DatabaseService {
     if (agentId != null) {
       await db.delete('base_memories', where: 'id = ? AND agent_id = ?', whereArgs: [id, agentId]);
     } else {
-      debugPrint('[DB] WARNING: deleteBaseMemory called without agentId, only deleting by id where agent_id IS NOT NULL');
-      await db.delete('base_memories', where: 'id = ? AND agent_id IS NOT NULL', whereArgs: [id]);
+      debugPrint('[DB] WARNING: deleteBaseMemory called without agentId — skipping');
     }
   }
 
@@ -341,7 +335,7 @@ class DatabaseService {
     if (agentId != null) {
       await db.delete('base_memories', where: 'agent_id = ?', whereArgs: [agentId]);
     } else {
-      await db.delete('base_memories');
+      debugPrint('[DB] WARNING: clearBaseMemories called without agentId — skipping');
     }
   }
 
@@ -353,8 +347,8 @@ class DatabaseService {
       final maps = await db.query('short_term_messages', where: 'agent_id = ?', whereArgs: [agentId], orderBy: 'timestamp ASC', limit: limit);
       return maps.map(ShortTermMessage.fromMap).toList();
     }
-    final maps = await db.query('short_term_messages', orderBy: 'timestamp ASC', limit: limit);
-    return maps.map(ShortTermMessage.fromMap).toList();
+    debugPrint('[DB] WARNING: getShortTermMessages called without agentId — returning empty');
+    return [];
   }
 
   static Future<int> getShortTermCount({String? agentId}) async {
@@ -387,7 +381,7 @@ class DatabaseService {
     if (agentId != null) {
       await db.delete('short_term_messages', where: 'id = ? AND agent_id = ?', whereArgs: [id, agentId]);
     } else {
-      await db.delete('short_term_messages', where: 'id = ?', whereArgs: [id]);
+      debugPrint('[DB] WARNING: deleteShortTermMessage called without agentId — skipping');
     }
   }
 
@@ -396,7 +390,7 @@ class DatabaseService {
     if (agentId != null) {
       await db.delete('short_term_messages', where: 'agent_id = ?', whereArgs: [agentId]);
     } else {
-      await db.delete('short_term_messages');
+      debugPrint('[DB] WARNING: clearShortTermMessages called without agentId — skipping');
     }
   }
 
@@ -412,7 +406,8 @@ class DatabaseService {
     if (agentId != null) {
       return await db.query('chat_messages', where: 'agent_id = ?', whereArgs: [agentId], orderBy: 'timestamp ASC');
     }
-    return await db.query('chat_messages', orderBy: 'timestamp ASC');
+    debugPrint('[DB] WARNING: getChatMessages called without agentId — returning empty');
+    return [];
   }
 
   static Future<void> deleteChatMessage(int id) async {
@@ -425,7 +420,7 @@ class DatabaseService {
     if (agentId != null) {
       await db.delete('chat_messages', where: 'agent_id = ?', whereArgs: [agentId]);
     } else {
-      await db.delete('chat_messages');
+      debugPrint('[DB] WARNING: clearChatMessages called without agentId — skipping');
     }
   }
 
@@ -640,6 +635,7 @@ class DatabaseService {
     await db.delete('long_term_memories', where: 'group_id = ?', whereArgs: [groupId]);
     await db.delete('base_memories', where: 'group_id = ?', whereArgs: [groupId]);
     await db.delete('group_chats', where: 'id = ?', whereArgs: [groupId]);
+    await db.delete('agents', where: 'source_group_id = ? AND is_sim_character = 1', whereArgs: [groupId]);
     debugPrint('[DB] Cascade deleted group $groupId');
   }
 
